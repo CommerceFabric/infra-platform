@@ -1,0 +1,62 @@
+version: "5.1.4"
+
+services:
+  postgressql-userservice:
+    image: postgres:18.0
+    container_name: postgressql-userservice
+    environment:
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: userService
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./Resources/docker/postgres-init:/docker-entrypoint-initdb.d
+    networks:
+      - commercefabric-network
+    restart: unless-stopped
+
+  userservice:
+    image: danielmusselwhite/commercefabric_user_microservice:1.0.0
+    container_name: userservice
+    build:
+      context: .
+      dockerfile: CommerceFabric.API/Dockerfile
+    ports:
+      - "9090:8080"
+    networks:
+      - commercefabric-network
+    depends_on:
+      - postgressql-userservice
+    restart: unless-stopped
+
+  mysql-productservice:
+    image: mysql:9.7.1
+    container_name: mysql-productservice
+    environment:
+      MYSQL_ROOT_PASSWORD: admin
+      MYSQL_DATABASE: productService
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./Resources/docker/mysql-init:/docker-entrypoint-initdb.d
+    networks:
+      - commercefabric-network
+    restart: unless-stopped
+
+  productservice:
+    image: danielmusselwhite/commercefabric_product_microservice:1.0.0
+    container_name: productservice
+    build:
+      context: .
+      dockerfile: CommerceFabric.ProductService/Dockerfile
+    ports:
+      - "8080:8080"
+    networks:
+      - commercefabric-network
+    depends_on:
+      - mysql-productservice
+    restart: unless-stopped
+
+networks:
+  commercefabric-network:
+    external: false
