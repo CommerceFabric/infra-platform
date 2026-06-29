@@ -16,7 +16,7 @@ services:
     restart: unless-stopped
 
   userservice:
-    image: danielmusselwhite/commercefabric_user_microservice:1.0.0
+    image: danielmusselwhite/commercefabric_user_microservice:${USER_VERSION}
     container_name: userservice
     build:
       context: .
@@ -44,7 +44,7 @@ services:
     restart: unless-stopped
 
   productservice:
-    image: danielmusselwhite/commercefabric_product_microservice:1.0.0
+    image: danielmusselwhite/commercefabric_product_microservice:${PRODUCT_VERSION}
     container_name: productservice
     build:
       context: .
