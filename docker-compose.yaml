@@ -57,6 +57,32 @@ services:
       - mysql-productservice
     restart: unless-stopped
 
+  mongodb-orderservice:
+    image: mongo:latest
+    container_name: mongodb-orderservice
+    ports:
+      - "27017:27017"
+    volumes:
+      - ./Resources/docker/mongodb-init/orders_mongoDB_init.js:/docker-entrypoint-initdb.d/orders_mongoDB_init.js:ro
+    networks:
+      - commercefabric-network
+    restart: unless-stopped
+
+  orderservice:
+    image: danielmusselwhite/commercefabric_order_microservice:${ORDER_VERSION}
+    container_name: orderservice
+    build:
+      context: .
+      dockerfile: CommerceFabric.API/Dockerfile
+    ports:
+      - "7070:8080"
+    networks:
+      - commercefabric-network
+    depends_on:
+      - mongodb-orderservice
+    restart: unless-stopped
+  
+
 networks:
   commercefabric-network:
     external: false
