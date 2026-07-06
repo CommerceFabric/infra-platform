@@ -18,9 +18,6 @@ services:
   userservice:
     image: danielmusselwhite/commercefabric_user_microservice:${USER_VERSION}
     container_name: userservice
-    build:
-      context: .
-      dockerfile: CommerceFabric.API/Dockerfile
     ports:
       - "9090:8080"
     networks:
@@ -46,9 +43,6 @@ services:
   productservice:
     image: danielmusselwhite/commercefabric_product_microservice:${PRODUCT_VERSION}
     container_name: productservice
-    build:
-      context: .
-      dockerfile: CommerceFabric.ProductService/Dockerfile
     ports:
       - "8080:8080"
     networks:
@@ -71,11 +65,12 @@ services:
   orderservice:
     image: danielmusselwhite/commercefabric_order_microservice:${ORDER_VERSION}
     container_name: orderservice
-    build:
-      context: .
-      dockerfile: CommerceFabric.API/Dockerfile
     ports:
       - "7070:8080"
+    environment:
+      - USERS_MICROSERVICE_HOST=userservice
+      - USERS_MICROSERVICE_PORT=8080
+      - USERS_MICROSERVICE_SCHEME=http
     networks:
       - commercefabric-network
     depends_on:
