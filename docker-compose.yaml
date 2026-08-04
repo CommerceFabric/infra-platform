@@ -1,3 +1,4 @@
+```yaml
 version: "5.1.4"
 
 services:
@@ -68,16 +69,67 @@ services:
     ports:
       - "7070:8080"
     environment:
-      - USERS_MICROSERVICE_HOST=userservice
+      - USERS_MICROSERVICE_HOST=apigateway
       - USERS_MICROSERVICE_PORT=8080
       - USERS_MICROSERVICE_SCHEME=http
+      - PRODUCTS_MICROSERVICE_HOST=apigateway
+      - PRODUCTS_MICROSERVICE_PORT=8080
+      - PRODUCTS_MICROSERVICE_SCHEME=http
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_USER=admin
+      - RABBITMQ_PASSWORD=admin
+      - RABBITMQ_PRODUCTS_EXCHANGE=products.exchange
+      - ORDERS_MONGODB_HOST=mongodb-orderservice
+      - ORDERS_MONGODB_PORT=27017
+      - MONGODB_DATABASE=OrdersDb
     networks:
       - commercefabric-network
     depends_on:
       - mongodb-orderservice
+      - redis
+      - rabbitmq
     restart: unless-stopped
-  
+
+  apigateway:
+    image: danielmusselwhite/commercefabric_api_gateway:${API_GATEWAY_VERSION}
+    container_name: apigateway
+    ports:
+      - "4000:8080"
+    networks:
+      - commercefabric-network
+    depends_on:
+      - userservice
+      - productservice
+    restart: unless-stopped
+
+  redis:
+    image: redis:latest
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./Resources/docker/redis-data:/data
+    networks:
+      - commercefabric-network
+    restart: unless-stopped
+
+  rabbitmq:
+    image: rabbitmq:4.3.3-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      - RABBITMQ_DEFAULT_USER=admin
+      - RABBITMQ_DEFAULT_PASS=admin
+    networks:
+      - commercefabric-network
+    restart: unless-stopped
 
 networks:
   commercefabric-network:
     external: false
+```
