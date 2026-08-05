@@ -23,23 +23,23 @@ spec:
         env:
         - name: ASPNETCORE_ENVIRONMENT
           value: Development
-        - name: MYSQL_HOST
+        - name: COMMERCEFABRIC_PRODUCTSERVICE_DB_HOST
           value: mysql
-        - name: MYSQL_PORT
+        - name: COMMERCEFABRIC_PRODUCTSERVICE_DB_PORT
           value: "3306"
-        - name: MYSQL_DATABASE
-          value: commercefabricproductsdatabase
-        - name: MYSQL_USER
+        - name: COMMERCEFABRIC_PRODUCTSERVICE_DB_NAME
+          value: productDB
+        - name: COMMERCEFABRIC_PRODUCTSERVICE_DB_USER
           value: root
-        - name: MYSQL_PASSWORD
+        - name: COMMERCEFABRIC_PRODUCTSERVICE_DB_PASSWORD
           value: admin
-        - name: RabbitMQ_HostName
+        - name: RABBITMQ_HOST
           value: rabbitmq
-        - name: RabbitMQ_Port
+        - name: RABBITMQ_PORT
           value: "5672"
-        - name: RabbitMQ_UserName
+        - name: RABBITMQ_USER
           value: guest
-        - name: RabbitMQ_Password
+        - name: RABBITMQ_PASSWORD
           value: guest
-        - name: RabbitMQ_Products_Exchange
+        - name: RABBITMQ_PRODUCTS_EXCHANGE
           value: products.exchange

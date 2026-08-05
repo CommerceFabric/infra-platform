@@ -23,20 +23,26 @@ spec:
         env:
         - name: ASPNETCORE_ENVIRONMENT
           value: Development
-        - name: MONGODB_HOST
+        - name: ASPNETCORE_HTTP_PORT
+          value: 8080
+        - name: ORDERS_MONGODB_HOST
           value: mongodb
-        - name: MONGODB_PORT
+        - name: ORDERS_MONGODB_PORT
           value: "27017"
         - name: MONGODB_DATABASE
-          value: OrdersDatabase
-        - name: UsersMicroservicePort
-          value: "8080"
-        - name: UsersMicroserviceName
-          value: apigatewayf
-        - name: ProductsMicroservicePort
-          value: "8080"
-        - name: ProductsMicroserviceName
+          value: OrdersDb
+        - name: USERS_MICROSERVICE_HOST
           value: apigateway
+        - name: USERS_MICROSERVICE_PORT
+          value: "8080"
+        - name: USERS_MICROSERVICE_SCHEME
+          value: http
+        - name: PRODUCTS_MICROSERVICE_HOST
+          value: apigateway
+        - name: PRODUCTS_MICROSERVICE_PORT
+          value: "8080"
+        - name: PRODUCTS_MICROSERVICE_SCHEME
+          value: http
         - name: REDIS_HOST
           value: redis
         - name: REDIS_PORT
@@ -49,7 +55,5 @@ spec:
           value: guest
         - name: RABBITMQ_PASSWORD
           value: guest
-        - name: RabbitMQ_Products_Exchange
+        - name: RABBITMQ_PRODUCTS_EXCHANGE
           value: products.exchange
-        - name: RabbitMQ_Users_Exchange
-          value: users.exchange

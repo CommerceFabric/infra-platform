@@ -23,13 +23,13 @@ spec:
         env:
         - name: ASPNETCORE_ENVIRONMENT
           value: Development
-        - name: POSTGRES_HOST
+        - name: COMMERCEFABRIC_USERSERVICE_DB_HOST
           value: postgres
-        - name: POSTGRES_PORT
-          value: "5432"
-        - name: POSTGRES_DATABASE
+        - name: COMMERCEFABRIC_USERSERVICE_DB_NAME
           value: commercefabricUsers
-        - name: POSTGRES_USER
+        - name: COMMERCEFABRIC_USERSERVICE_DB_PORT
+          value: "5432"
+        - name: COMMERCEFABRIC_USERSERVICE_DB_USER
           value: postgres
-        - name: POSTGRES_PASSWORD
+        - name: COMMERCEFABRIC_USERSERVICE_DB_PASSWORD
           value: admin

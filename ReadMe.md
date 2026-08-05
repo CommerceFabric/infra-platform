@@ -1,6 +1,8 @@
 # TODO
 
 - orders microservice is currently failing as it requires the service manifests so it can actually communicate with those services as ight now it gives BrokerUnreachableException 
+- Add a diagram explaining the flow
+- Add a diagram explaining how the deployment + service manifests are used within aks to deploy and allow the services to communicate with one another
 
 # infra-platform (CommerceFabric)
 
