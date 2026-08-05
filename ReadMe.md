@@ -8,7 +8,9 @@
 
 This repository is the **system entry point** for the CommerceFabric microservices ecosystem.
 
-It defines how all services, databases, and infrastructure components run together using Docker Compose.
+It defines how all services, databases, and infrastructure components run together.
+
+# Run Project Locally (docker-compose)
 
 To run the project use 
 ```bash
@@ -22,147 +24,15 @@ docker-compose down
 
 ---
 
-## Pushing Docker Compose Images to Azure Container Registry
+# Pushing Docker Compose Images to Azure Container Registry
+
+> ℹ First, ensure you have set up the required azure resources: [SettingUpAzureResources](./docs/SettingUpAzureResources.md)
 
 The `docker-compose.yaml` file pulls the other microservices and supporting services from Docker Hub. This means that after running Docker Compose, all of the required images are available locally.
 
 These images can then be tagged and pushed to my Azure Container Registry (ACR).
 
-### 1. Pull and build all images
-
-If the images have not already been downloaded/built locally:
-
-```bash
-docker-compose -f docker-compose.yaml pull
-```
-
-This will:
-
-* Pull the Users microservice from Docker Hub
-* Pull the Products microservice from Docker Hub
-* Pull MongoDB
-* Pull PostgreSQL
-* Pull MySQL
-* Pull Redis
-* Pull RabbitMQ
-* Build the Orders microservice
-* Build the API Gateway
-
-Check the locally available images with:
-
-```bash
-docker images
-```
-
-### 2. Log in to Azure Container Registry
-
-My Azure Container Registry is:
-
-```text
-commercefabricregistry.azurecr.io
-```
-
-Log in using:
-
-```bash
-az acr login --name commercefabricregistry
-```
-
-### 3. Tag the images
-
-Tag the application images with the ACR registry name:
-
-```bash
-docker tag ordersmicroserviceapi:latest commercefabricregistry.azurecr.io/orders-microservice:latest
-
-docker tag apigateway:latest commercefabricregistry.azurecr.io/apigateway:latest
-
-docker tag danielmusselwhite/commercefabric_user_microservice:1.0.0 commercefabricregistry.azurecr.io/users-microservice:latest
-
-docker tag danielmusselwhite/commercefabric_product_microservice:1.0.0 commercefabricregistry.azurecr.io/products-microservice:latest
-
-docker tag mongo:latest commercefabricregistry.azurecr.io/mongo:latest
-
-docker tag postgres:18.0 commercefabricregistry.azurecr.io/postgres:18.0
-
-docker tag mysql:9.7.1 commercefabricregistry.azurecr.io/mysql:9.7.1
-
-docker tag redis:latest commercefabricregistry.azurecr.io/redis:latest
-
-docker tag rabbitmq:4.3.3-management commercefabricregistry.azurecr.io/rabbitmq:4.3.3-management
-```
-
-> **Note:** The exact local image names can be checked with `docker images`. If Docker Compose has generated a different image name, use that name when running `docker tag`.
-
-### 4. Push the images to ACR
-
-Push the application images:
-
-```bash
-docker push commercefabricregistry.azurecr.io/orders-microservice:latest
-
-docker push commercefabricregistry.azurecr.io/apigateway:latest
-
-docker push commercefabricregistry.azurecr.io/users-microservice:latest
-
-docker push commercefabricregistry.azurecr.io/products-microservice:latest
-
-docker push commercefabricregistry.azurecr.io/mongo:latest
-
-docker push commercefabricregistry.azurecr.io/postgres:18.0
-
-docker push commercefabricregistry.azurecr.io/mysql:9.7.1
-
-docker push commercefabricregistry.azurecr.io/redis:latest
-
-docker push commercefabricregistry.azurecr.io/rabbitmq:4.3.3-management
-```
-
-The images can then be viewed in the Azure Container Registry:
-
-```bash
-az acr repository list --name commercefabricregistry --output table
-```
-
-The application images will be available as:
-
-```text
-commercefabricregistry.azurecr.io/orders-microservice:latest
-commercefabricregistry.azurecr.io/apigateway:latest
-commercefabricregistry.azurecr.io/users-microservice:latest
-commercefabricregistry.azurecr.io/products-microservice:latest
-```
-
-These images can then be referenced by the Kubernetes deployments running in AKS.
-
----
-
-# infra-platform (CommerceFabric)
-
-This repository is the **system entry point** for the CommerceFabric microservices ecosystem.
-
-It defines how all services, databases, and infrastructure components run together using Docker Compose.
-
-To run the project use:
-
-```bash
-docker-compose up
-```
-
-To stop the project use:
-
-```bash
-docker-compose down
-```
----
-
-## Pushing Docker Compose Images to Azure Container Registry
-
-The `docker-compose.yaml` file pulls the other microservices and supporting services from Docker Hub. This means that after running Docker Compose, all of the required images are available locally.
-
-These images can then be tagged and pushed to my Azure Container Registry (ACR).
-
-### 1. Pull all images
+## 1. Pull all images
 
 If the images have not already been downloaded/built locally:
 
@@ -188,7 +58,7 @@ Check the locally available images with:
 docker images
 ```
 
-### 2. Log in to Azure Container Registry
+## 2. Log in to Azure Container Registry
 
 My Azure Container Registry is:
 
@@ -204,7 +74,7 @@ az acr login --name commercefabricregistry
 
 Important: This login only gives the local machine access to ACR. It does not give AKS permission to pull images from ACR. AKS access is configured separately in Step 5.
 
-### 3. Tag the images
+## 3. Tag the images
 
 Tag the application images with the ACR registry name:
 Note: Redis and RabitMQ doesn't need to be tagged or pushed as the deployment manifest for AKS specifies thems as coming from dockerhub
@@ -227,7 +97,7 @@ docker tag mysql:9.7.1 commercefabricregistry.azurecr.io/mysql:9.7.1
 
 > **Note:** The exact local image names can be checked with `docker images`. If Docker Compose has generated a different image name, use that name when running `docker tag`.
 
-### 4. Push the images to ACR
+## 4. Push the images to ACR
 
 Push the application images:
 
@@ -383,7 +253,7 @@ The exact values should match the names defined in the Kubernetes Service manife
 
 ---
 
-## 8s. Restart workloads after configuration changes
+## 8. Restart workloads after configuration changes
 
 If the Kubernetes manifests or image configuration are changed, apply them again:
 
