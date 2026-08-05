@@ -97,3 +97,7 @@ kubectl get pods -n commercefabric-namespace -w
 ```
 
 ---
+
+# Notes
+
+> Currently secrets are stored in plaintext in the Kubernetes manifests. In a production environment, secrets should be stored in Azure Key Vault and referenced in the manifests, or through Kubernetes secrets.
