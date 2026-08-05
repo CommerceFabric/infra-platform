@@ -21,6 +21,7 @@ spec:
         env:
         - name: MYSQL_ROOT_PASSWORD
           value: admin
+        - name: MYSQL_DATABASE
+          value: productDB
         ports:
         - containerPort: 3306
-

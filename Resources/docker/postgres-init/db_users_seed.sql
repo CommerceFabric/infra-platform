@@ -1,6 +1,6 @@
--- CREATE Database userService; -- not needed as this is done in the docker-compose file
+-- CREATE Database commercefabricUsers; -- not needed as this is done in the docker-compose file
 
-CREATE TABLE public.users (
+CREATE TABLE IF NOT EXISTS public.users (
     UserID UUID PRIMARY KEY,
     PersonName VARCHAR(50) NOT NULL,
     Email VARCHAR(50) NOT NULL,
@@ -8,3 +8,9 @@ CREATE TABLE public.users (
     Gender VARCHAR(50) NOT NULL,
     CONSTRAINT EmailUnique UNIQUE (Email)
 );
+
+-- Sample data for insertion
+INSERT INTO public.users (userid, email, personname, gender, password)
+VALUES 
+('c32f8b42-60e6-4c02-90a7-9143ab37189f', 'test1@example.com', 'John Doe', 'Male', 'password1'),
+('8ff22c7d-18c7-4ef0-a0ac-988ecb2ac7f5', 'test2@example.com', 'Jane Smith', 'Female', 'password2');

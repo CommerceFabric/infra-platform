@@ -1,6 +1,6 @@
 -- Create the database
-CREATE DATABASE IF NOT EXISTS productService;
-USE productService;
+CREATE DATABASE IF NOT EXISTS productDB;
+USE productDB;
 
 -- Create the products table
 CREATE TABLE IF NOT EXISTS Products (
@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS Products (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Seed data
-INSERT INTO Products (ProductID, ProductName, Category, UnitPrice, QuantityInStock) VALUES
+INSERT IGNORE INTO Products (ProductID, ProductName, Category, UnitPrice, QuantityInStock) VALUES
   ('1a9df78b-3f46-4c3d-9f2a-1b9f69292a77', 'Apple iPhone 15 Pro Max', 'Electronics', 1299.99, 50),
   ('2c8e8e7c-97a3-4b11-9a1b-4dbe681cfe17', 'Samsung Foldable Smart Phone 2', 'Electronics', 1499.99, 100),
   ('3f3e8b3a-4a50-4cd0-8d8e-1e178ae2cfc1', 'Ergonomic Office Chair', 'Furniture', 249.99, 25),

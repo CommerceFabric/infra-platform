@@ -1,0 +1,35 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mysql-seed-job
+  namespace: commercefabric-namespace
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 300
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: mysql-seeder
+        image: commercefabricregistry.azurecr.io/mysql:9.7.1
+        command:
+        - /bin/sh
+        - -c
+        - |
+          set -e
+          until mysqladmin ping -hmysql -uroot -padmin --silent; do
+            echo "Waiting for mysql service..."
+            sleep 2
+          done
+
+          echo "Running MySQL seed script..."
+          mysql -hmysql -uroot -padmin < /seed/db_products_seed.sql
+          echo "MySQL seed completed."
+        volumeMounts:
+        - name: mysql-seed-sql
+          mountPath: /seed
+          readOnly: true
+      volumes:
+      - name: mysql-seed-sql
+        configMap:
+          name: mysql-seed-sql

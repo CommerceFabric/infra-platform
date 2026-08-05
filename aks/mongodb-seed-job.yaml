@@ -1,0 +1,35 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mongodb-seed-job
+  namespace: commercefabric-namespace
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 300
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: mongodb-seeder
+        image: commercefabricregistry.azurecr.io/mongo:8.3.7
+        command:
+        - /bin/sh
+        - -c
+        - |
+          set -e
+          until [ "$(mongosh --host mongodb --quiet --eval 'db.runCommand({ ping: 1 }).ok')" = "1" ]; do
+            echo "Waiting for mongodb service..."
+            sleep 2
+          done
+
+          echo "Running MongoDB seed script..."
+          mongosh --host mongodb /seed/orders_mongoDB_init.js
+          echo "MongoDB seed completed."
+        volumeMounts:
+        - name: mongodb-seed-js
+          mountPath: /seed
+          readOnly: true
+      volumes:
+      - name: mongodb-seed-js
+        configMap:
+          name: mongodb-seed-js
