@@ -24,7 +24,7 @@ spec:
         - name: ASPNETCORE_ENVIRONMENT
           value: Development
         - name: ASPNETCORE_HTTP_PORT
-          value: 8080
+          value: "8080"
         - name: ORDERS_MONGODB_HOST
           value: mongodb
         - name: ORDERS_MONGODB_PORT
