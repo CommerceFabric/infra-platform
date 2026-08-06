@@ -56,7 +56,7 @@ jobs:
           --name ${{ secrets.AZURE_AKS_CLUSTER }}
 
 
-    - name: Deploy Microservice
+    - name: Deploy Service
       run: |
 
         SERVICE="${{ github.event.client_payload.service || github.event.inputs.service }}"
@@ -65,10 +65,22 @@ jobs:
         echo "Deploying service: $SERVICE"
         echo "Image tag: $IMAGE_TAG"
 
-        kubectl set image \
-          deployment/${SERVICE}-microservice-deployment \
-          ${SERVICE}-microservice=commercefabricregistry.azurecr.io/${SERVICE}-microservice:${IMAGE_TAG} \
-          -n commercefabric-namespace
+
+        if [ "$SERVICE" = "apigateway" ]; then
+
+          kubectl set image \
+            deployment/apigateway-deployment \
+            apigateway=commercefabricregistry.azurecr.io/apigateway:${IMAGE_TAG} \
+            -n commercefabric-namespace
+
+        else
+
+          kubectl set image \
+            deployment/${SERVICE}-microservice-deployment \
+            ${SERVICE}-microservice=commercefabricregistry.azurecr.io/${SERVICE}-microservice:${IMAGE_TAG} \
+            -n commercefabric-namespace
+
+        fi
 
 
     - name: Verify deployment
@@ -76,6 +88,16 @@ jobs:
 
         SERVICE="${{ github.event.client_payload.service || github.event.inputs.service }}"
 
-        kubectl rollout status \
-          deployment/${SERVICE}-microservice-deployment \
-          -n commercefabric-namespace
+        if [ "$SERVICE" = "apigateway" ]; then
+
+          kubectl rollout status \
+            deployment/apigateway-deployment \
+            -n commercefabric-namespace
+
+        else
+
+          kubectl rollout status \
+            deployment/${SERVICE}-microservice-deployment \
+            -n commercefabric-namespace
+
+        fi
