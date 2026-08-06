@@ -16,7 +16,7 @@ services:
     restart: unless-stopped
 
   userservice:
-    image: danielmusselwhite/commercefabric_user_microservice:${USER_VERSION}
+    image: danielmusselwhite/commercefabric_user_microservice:latest
     container_name: userservice
     ports:
       - "9090:8080"
@@ -41,7 +41,7 @@ services:
     restart: unless-stopped
 
   productservice:
-    image: danielmusselwhite/commercefabric_product_microservice:${PRODUCT_VERSION}
+    image: danielmusselwhite/commercefabric_product_microservice:latest
     container_name: productservice
     ports:
       - "8080:8080"
@@ -63,7 +63,7 @@ services:
     restart: unless-stopped
 
   orderservice:
-    image: danielmusselwhite/commercefabric_order_microservice:${ORDER_VERSION}
+    image: danielmusselwhite/commercefabric_order_microservice:latest
     container_name: orderservice
     ports:
       - "7070:8080"
@@ -93,7 +93,7 @@ services:
     restart: unless-stopped
 
   apigateway:
-    image: danielmusselwhite/commercefabric_api_gateway:${API_GATEWAY_VERSION}
+    image: danielmusselwhite/commercefabric_api_gateway:latest
     container_name: apigateway
     ports:
       - "4000:8080"

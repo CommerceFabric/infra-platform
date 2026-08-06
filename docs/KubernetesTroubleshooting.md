@@ -138,19 +138,4 @@ If you want a fully clean dataset:
 4. Recreate seed Job
 5. Verify counts
 
-Detailed per-database commands are in:
-
-- `docs/DatabaseSeedingAndPersistence.md`
-
 ---
-
-## 5) Persistence reminder (important)
-
-Current setup uses no PVC for MySQL/PostgreSQL/MongoDB data.
-
-That means:
-
-- Data can be lost when Pods are replaced (for example during image updates)
-- Seed Jobs may need to be re-run after Pod replacement
-
-If you need real persistence across restarts and upgrades, add a PersistentVolumeClaim and mount data directories in each database deployment.

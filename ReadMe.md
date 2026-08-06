@@ -1,103 +1,211 @@
 # infra-platform (CommerceFabric)
 
-This repository is the **system entry point** for the CommerceFabric microservices ecosystem.
+The **infra-platform** repository contains the infrastructure-as-code, Kubernetes manifests, and deployment automation required to run the CommerceFabric platform on **Microsoft Azure Kubernetes Service (AKS)**.
 
-It defines how all services, databases, and infrastructure components are run and deployed together, both locally using Docker Compose and in Azure Kubernetes Service (AKS).
+This repository is responsible for the **continuous deployment (CD)** side of the platform. Microservice repositories are responsible for building, testing, and publishing container images, while this repository manages deploying those images into the AKS environment.
 
----
+This repository manages:
 
-## Run Locally with Docker Compose
+- Kubernetes manifests for platform services
+- Application deployments and service configuration
+- Azure Kubernetes Service (AKS) deployment configuration
+- GitHub Actions deployment workflows
+- Azure authentication configuration using Workload Identity Federation (OIDC)
+- Deployment documentation and operational guidance
 
-To start the CommerceFabric environment locally:
+The CommerceFabric platform runs as a collection of independent Kubernetes workloads, with each microservice deployed separately into the `commercefabric-namespace` Kubernetes namespace.
 
-```bash
-docker-compose up
-```
+> ℹ **Note:** if you are deploying the platform for the first time, ensure you have set up the required Azure resources: [SettingUpAzureResources](./docs/SettingUpAzureResources.md)
 
-To stop the environment:
-
-```bash
-docker-compose down
-```
-
----
-
-## Push Docker Compose Images to Azure Container Registry
-
-If any Docker images have been updated, they need to be pushed to Azure Container Registry (ACR) so that AKS can pull and run the latest versions.
-
-See:
-
-* [Push images to ACR](./docs/PushDockerComposeImages.md)
+> ℹ **Note:** if you are updating versions of external servicies (mongodb, postgresql, mysql, redis, rabbitmq, etc.) you will need to [Manually Push Docker Compose Images](./docs/PushDockerComposeImages.md)
 
 ---
 
-## Deploy the Kubernetes Resources
+# Repository Structure
 
-Once the required images are available in ACR and AKS has permission to pull them, deploy the Kubernetes manifests located in [`aks`](./aks/):
-
-```bash
-kubectl apply -f ./aks
 ```
-
-For more information on how this works please see: [Kubernetes manifests documentation](./docs/KubernetesManifestsHowTo.md)
-
-For database seed behavior, persistence expectations, and clean reset steps, see: [Database seeding and persistence guide](./docs/DatabaseSeedingAndPersistence.md)
-
-For a simple troubleshooting summary of issues fixed in this project and repeatable checks, see: [Kubernetes troubleshooting guide](./docs/KubernetesTroubleshooting.md)
-
----
-
-## Verify the Deployment
-
-After applying the manifests, verify that the resources have started successfully.
-
-### Check the Deployments
-
-```bash
-kubectl get deployments -n commercefabric-namespace
-```
-
-### Check the Pods
-
-```bash
-kubectl get pods -n commercefabric-namespace
-```
-
-### Check the Kubernetes Services
-
-```bash
-kubectl get services -n commercefabric-namespace
-```
-
-The Services are particularly important because they provide the stable DNS names that microservices use to communicate with one another inside the Kubernetes cluster.
-
----
-
-## Restart Workloads After Configuration Changes
-
-If Kubernetes manifests or image configuration are changed, apply the manifests again:
-
-```bash
-kubectl apply -f ./aks
-```
-
-Note: completed Kubernetes `Job` resources (for example database seed jobs) do not automatically rerun on a plain `kubectl apply`. Recreate the Job if you need to run it again.
-
-If necessary, restart the deployments:
-
-```bash
-kubectl rollout restart deployment -n commercefabric-namespace
-```
-
-Then monitor the pods:
-
-```bash
-kubectl get pods -n commercefabric-namespace -w
+infra-platform/
+│
+├── aks/             # Kubernetes manifests
+|
+├── .github/
+│   └── workflows/   # GitHub Actions CI/CD workflows
 ```
 
 ---
 
-# Notes
+# GitHub Actions CI/CD Workflows
 
-> Currently secrets are stored in plaintext in the Kubernetes manifests. In a production environment, secrets should be stored in Azure Key Vault and referenced in the manifests, or through Kubernetes secrets.
+The repository uses GitHub Actions to automate deployments into Azure Kubernetes Service.
+
+Deployment workflows support:
+
+- Building and deploying microservices
+- Updating Kubernetes deployments with new container images
+- Rolling out new versions into AKS
+- Verifying successful deployments
+
+Currently supported services:
+
+- Orders microservice
+- Products microservice
+- Users microservice
+
+This is triggered either:
+
+- Manually by specifying the service name and the container image tag to deploy via the GitHub Actions workflow dispatch interface.
+- Automatically, as part of the CI/CD pipeline. As when a microservice repo is updated, its CI pipeline pushes the image to the Azure Container Registry and then triggers the deployment workflow in this repository to perform the CD by updating the Kubernetes deployment with the new image.
+
+## Diagram of the CI/CD flow
+
+```
+                         ┌──────────────────────────┐
+                         │  Developer pushes code   │
+                         │  to microservice repo    │
+                         └────────────┬─────────────┘
+                                      │
+                                      ▼
+                         ┌──────────────────────────┐
+                         │   GitHub Actions CI      │
+                         │                          │
+                         │  - Build Docker image    │
+                         │  - Run tests             │
+                         │  - Tag image with SHA    │
+                         └────────────┬─────────────┘
+                                      │
+                                      ▼
+              ┌──────────────────────────────────────────┐
+              │ Azure Container Registry (ACR)           │
+              │                                          │
+              │ commercefabricregistry.azurecr.io        │
+              │                                          │
+              │ orders-microservice:<version>            │
+              │ products-microservice:<version>          │
+              │ users-microservice:<version>             │
+              └──────────────────┬───────────────────────┘
+                                 │
+                                 │ repository_dispatch
+                                 │
+                                 │ Payload:
+                                 │ {
+                                 │   service: "orders",
+                                 │   image_tag: "8ce72d29..."
+                                 │ }
+                                 ▼
+              ┌──────────────────────────────────────────┐
+              │ GitHub Actions Deployment Workflow       │
+              │                                          │
+              │ Deploy to AKS                            │
+              │                                          │
+              │ 1. Authenticate to Azure (OIDC)          │
+              │ 2. Connect to AKS                        │
+              │ 3. Update Kubernetes deployment image    │
+              └──────────────────┬───────────────────────┘
+                                 │
+                                 ▼
+              ┌──────────────────────────────────────────┐
+              │ Azure Kubernetes Service (AKS)           │
+              │                                          │
+              │ Namespace: commercefabric-namespace      │
+              │                                          │
+              │ orders-microservice-deployment           │
+              │        │                                 │
+              │        ▼                                 │
+              │ Pull image:                              │
+              │ commercefabricregistry.azurecr.io/       │
+              │ orders-microservice:<version>            │
+              │                                          │
+              │ products-microservice-deployment         │
+              │ users-microservice-deployment            │
+              └──────────────────────────────────────────┘
+```
+
+---
+
+## Azure Authentication
+
+GitHub Actions authenticates with Azure using **Workload Identity Federation (OIDC)**.
+
+This provides secure authentication without requiring long-lived Azure credentials or service principal secrets stored in GitHub.
+
+The deployment flow is:
+
+1. GitHub Actions requests an OIDC token from GitHub.
+2. Azure validates the federated identity credential.
+3. The workflow authenticates against Azure.
+4. The workflow connects to AKS.
+5. Kubernetes resources are deployed or updated.
+
+---
+
+# Azure Kubernetes Service (AKS)
+
+The CommerceFabric platform runs on Azure Kubernetes Service.
+
+Each microservice is deployed as a Kubernetes Deployment within:
+
+```
+commercefabric-namespace
+```
+
+The main application services are:
+
+| Service | Kubernetes Deployment |
+|---|---|
+| Orders | `orders-microservice-deployment` |
+| Products | `products-microservice-deployment` |
+| Users | `users-microservice-deployment` |
+
+---
+
+# Deployment Verification
+
+After deployment, you can verify the running workloads using:
+
+```powershell
+kubectl get deployments -n commercefabric-namespace; # view deployments
+
+kubectl get pods -n commercefabric-namespace; # view pods
+
+kubectl describe pod <pod-name> -n commercefabric-namespace # check container image running on a pod is the expected one
+
+kubectl rollout status deployment/<deployment-name> -n commercefabric-namespace # check rollout status of a deployment
+```
+
+---
+
+# Manual Deployment
+
+If you need to manually deploy or recreate the platform infrastructure, follow the deployment guide:
+
+[Manual deployment and setup guide](./docs/ManualDeploymentGuide.md)
+
+---
+
+# Security Notes
+
+> ⚠️ **Kubernetes Secrets**
+>
+> Kubernetes manifests currently contain secrets in plaintext for development and demonstration purposes.
+>
+> In a production environment, secrets should be stored securely using a dedicated secrets management solution.
+
+---
+
+> ✔ **GitHub Actions Secrets**
+>
+> Deployment workflows use GitHub Actions Secrets for sensitive configuration values such as Azure authentication details.
+>
+> These secrets are protected by GitHub and are not exposed directly in workflow files.
+
+---
+
+> ℹ️ **Deploy-All workflow**
+>
+> A separate **deploy-all** workflow is available for initial platform deployments or situations where all Kubernetes resources need to be recreated.
+>
+> Unlike the normal microservice deployment workflow, this workflow does not receive a specific image tag from a microservice repository. Instead, it applies all Kubernetes manifests from the `aks/` directory using `kubectl apply`.
+>
+> The workflow deploys all configured services using their manifest-defined container image versions. If the manifests reference the `latest` image tag, Kubernetes will use the latest available image from Azure Container Registry.
+>
+> This workflow is intended for manual use from the GitHub Actions interface and is not triggered automatically by individual microservice repositories.

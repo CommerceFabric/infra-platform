@@ -2,15 +2,11 @@
 
 > ℹ First, ensure you have set up the required Azure resources: [SettingUpAzureResources](./SettingUpAzureResources.md)
 
-The `docker-compose.yaml` file pulls the other microservices and supporting services from Docker Hub. This means that after running Docker Compose, all of the required images are available locally.
-
-These images can then be tagged and pushed to my Azure Container Registry (ACR).
-
 Important for database images: runtime seed data created by Docker Compose init mounts is not baked into the base image tags pushed to ACR. In AKS, seed scripts should be applied with Kubernetes-native resources (for example, ConfigMap + Job manifests).
 
 ## 1. Pull all images
 
-If the images have not already been downloaded/built locally:
+Pulls the latest version of all images defined in the `docker-compose.yaml` file:
 
 ```bash
 docker-compose -f docker-compose.yaml pull

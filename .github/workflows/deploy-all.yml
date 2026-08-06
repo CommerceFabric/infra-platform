@@ -1,0 +1,75 @@
+name: Deploy All Services to AKS
+
+on:
+
+  workflow_dispatch:
+
+
+jobs:
+
+  deploy:
+
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+      contents: read
+
+
+    steps:
+
+    - name: Checkout
+      uses: actions/checkout@v4
+
+
+    - name: Azure Login
+      uses: azure/login@v2
+      with:
+        client-id: ${{ secrets.AZURE_CLIENT_ID }}
+        tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+        subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+
+    - name: Connect to AKS
+      run: |
+        az aks get-credentials \
+          --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
+          --name ${{ secrets.AZURE_AKS_CLUSTER }}
+
+
+    - name: Apply Kubernetes manifests
+      run: |
+
+        kubectl apply -f aks/
+
+
+    - name: Wait for Orders rollout
+      run: |
+
+        kubectl rollout status \
+          deployment/orders-microservice-deployment \
+          -n commercefabric-namespace
+
+
+    - name: Wait for Products rollout
+      run: |
+
+        kubectl rollout status \
+          deployment/products-microservice-deployment \
+          -n commercefabric-namespace
+
+
+    - name: Wait for User rollout
+      run: |
+
+        kubectl rollout status \
+          deployment/user-microservice-deployment \
+          -n commercefabric-namespace
+
+
+    - name: Show deployed images
+      run: |
+
+        kubectl get pods \
+          -n commercefabric-namespace \
+          -o jsonpath="{range .items[*]}{.metadata.name}{': '}{.status.containerStatuses[0].image}{'\n'}{end}"

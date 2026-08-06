@@ -1,119 +1,130 @@
 # Kubernetes Manifests Explained
 
-The Kubernetes manifests define how the microservices are deployed and how they communicate within the AKS cluster.
+The Kubernetes manifests define how the CommerceFabric platform runs inside Azure Kubernetes Service (AKS).
 
-This repository primarily uses the following Kubernetes resource types:
+They describe:
+
+- How microservices are deployed
+- How services communicate internally
+- How databases are initialised
+- How external traffic reaches the platform
+
+---
+
+# Kubernetes Resources
 
 ## Deployments
 
-**Deployment manifests** define how each microservice runs in AKS.
+Deployments manage the lifecycle of application Pods.
 
-They specify things such as:
+They define:
 
-* Which Docker image should be run
-* How many replicas should be created
-* Container configuration
-* Environment variables
-* Container ports
-* Resource requests and limits
+- Container image to run
+- Number of replicas
+- Environment variables
+- Container ports
+- Resource settings
 
-A Deployment manages the lifecycle of the Pods running the microservice.
+Example:
 
-## ConfigMaps
+```
 
-**ConfigMap manifests** store configuration or seed script content so it can be mounted into Pods at runtime.
+Deployment
+|
+v
+Pod(s)
+|
+v
+Container running microservice
 
-In this repository, ConfigMaps are used to hold database seed scripts for AKS database initialization Jobs.
+```
 
-## Jobs
-
-**Job manifests** run one-off tasks to completion.
-
-In this repository, Jobs are used to apply database seed scripts in AKS after the database services are available.
+---
 
 ## Services
 
-**Service manifests** provide a stable network endpoint for the Pods running a microservice.
+Services provide stable network access to Pods.
 
-They allow other workloads to communicate with a microservice without needing to know the IP address of an individual Pod.
+Pods are temporary and can change IP addresses, so microservices communicate using Service names instead of Pod IP addresses.
 
-In this repository:
+The platform uses:
 
-* The **API Gateway** uses a `LoadBalancer` Service and is externally accessible.
-* The other microservices use `ClusterIP` Services and are only accessible from within the Kubernetes cluster.
+| Service Type | Purpose |
+|---|---|
+| LoadBalancer | Exposes the API Gateway externally |
+| ClusterIP | Internal communication between microservices |
 
-The overall traffic flow looks like this:
+Example:
 
-```text
-External Client
-      │
-      │ HTTP request
-      ▼
-┌─────────────────────┐
-│    API Gateway      │
-│    LoadBalancer     │
-│    External IP      │
-└──────────┬──────────┘
-           │
-           │ Internal Kubernetes traffic
-           ▼
-┌─────────────────────┐
-│ Products Service    │
-│ ClusterIP           │
-└──────────┬──────────┘
-           │
-           ▼
-     Products Pod(s)
 ```
 
-The API Gateway is therefore the public entry point. The individual microservices do not need to be exposed directly to the internet.
+External Client
+|
+v
+API Gateway
+(LoadBalancer)
+|
+v
+Products Service
+(ClusterIP)
+|
+v
+Products Pod
 
-## Service Names and Kubernetes DNS
+````
 
-Microservices communicate with each other using **Kubernetes Service names**, rather than Pod IP addresses.
+The API Gateway is the only public entry point. Internal microservices are not exposed directly to the internet.
 
-For example, suppose the Products microservice has a Kubernetes Service defined like this:
+---
+
+# Kubernetes DNS and Service Names
+
+Microservices communicate using Kubernetes Service names.
+
+Example Service:
 
 ```yaml
 apiVersion: v1
 kind: Service
 metadata:
   name: products-microservice
-spec:
-  type: ClusterIP
-  selector:
-    app: products-microservice
-  ports:
-    - port: 8080
-      targetPort: 8080
+````
+
+The Service name becomes the internal hostname:
+
 ```
-
-The important part here is:
-
-```yaml
-metadata:
-  name: products-microservice
-```
-
-This is the **Kubernetes Service name**.
-
-Other workloads inside the cluster can use this name to communicate with the Products microservice:
-
-```text
 products-microservice:8080
 ```
 
-Kubernetes DNS resolves `products-microservice` to the internal Service, which then routes the request to one of the matching Products Pods.
+Kubernetes DNS automatically resolves this hostname to the correct Service.
 
-### How Ocelot uses the Service name
+Traffic flow:
 
-The API Gateway in this repository uses **Ocelot** to determine where requests should be forwarded.
+```
+API Gateway
+      |
+      | Host: products-microservice
+      |
+      v
+Kubernetes DNS
+      |
+      v
+products-microservice Service
+      |
+      v
+Products Pod(s)
+```
 
-For example, the Ocelot configuration might contain:
+---
+
+# Ocelot API Gateway Routing
+
+The API Gateway uses Ocelot to forward requests to internal microservices.
+
+Example:
 
 ```json
 {
-  "DownstreamPathTemplate": "/api/products",
   "DownstreamHostAndPorts": [
     {
       "Host": "products-microservice",
@@ -123,185 +134,77 @@ For example, the Ocelot configuration might contain:
 }
 ```
 
-Here, Ocelot is configured with:
+The `Host` value must match the Kubernetes Service name.
 
-```text
-Host = products-microservice
-Port = 8080
+These must stay aligned:
+
+```
+Kubernetes Service          Ocelot Configuration
+------------------          --------------------
+products-microservice  <--> "Host": "products-microservice"
 ```
 
-The `Host` value is important because it needs to match the Kubernetes Service name.
+If they do not match, Kubernetes DNS cannot find the service and requests will fail.
 
-The relationship is:
+---
 
-```text
-                 External Request
-                       │
-                       │ GET /products
-                       ▼
-              ┌──────────────────┐
-              │   API Gateway     │
-              │   LoadBalancer    │
-              └────────┬─────────┘
-                       │
-                       │ Ocelot
-                       │
-                       │ Host:
-                       │ products-microservice
-                       ▼
-              ┌──────────────────┐
-              │ Kubernetes DNS   │
-              └────────┬─────────┘
-                       │
-                       │ resolves
-                       ▼
-              ┌──────────────────┐
-              │ products-        │
-              │ microservice     │
-              │ ClusterIP        │
-              └────────┬─────────┘
-                       │
-                       ▼
-                Products Pod(s)
+# Complete Request Flow
+
+Example request:
+
+```
+GET http://<API-GATEWAY-IP>/products
 ```
 
-### Why the names must match
+Flow:
 
-The Kubernetes Service might be called:
-
-```yaml
-metadata:
-  name: products-microservice
 ```
-
-Therefore Ocelot should use:
-
-```json
-{
-  "Host": "products-microservice",
-  "Port": 8080
-}
-```
-
-These two names are connected:
-
-```text
-Kubernetes Service             Ocelot
-------------------             -------------------------
-products-microservice   <───>  "Host": "products-microservice"
-```
-
-If the Kubernetes Service were accidentally renamed to:
-
-```yaml
-metadata:
-  name: product-microservice
-```
-
-but Ocelot still contained:
-
-```json
-{
-  "Host": "products-microservice",
-  "Port": 8080
-}
-```
-
-then Ocelot would try to send the request to:
-
-```text
-products-microservice
-```
-
-Kubernetes DNS would look for a Service with that name, but the Service would actually be called:
-
-```text
-product-microservice
-```
-
-The hostname would therefore not resolve and the request would fail.
-
-This is why **the Service names in the Kubernetes manifests and the hostnames configured in Ocelot need to stay in sync**.
-
-### Complete example
-
-For example, a request from outside the cluster might look like:
-
-```text
-GET http://<API-GATEWAY-EXTERNAL-IP>/products
-```
-
-The flow is:
-
-```text
 External Client
-      │
-      │ GET /products
-      ▼
-API Gateway
-      │
-      │ Ocelot determines the downstream service
-      │
-      │ Host: products-microservice
-      │ Port: 8080
-      ▼
-Kubernetes DNS
-      │
-      │ resolves products-microservice
-      ▼
-Products Service
-      │
-      │ ClusterIP
-      ▼
+      |
+      v
+API Gateway LoadBalancer
+      |
+      v
+Ocelot Routing
+      |
+      | products-microservice:8080
+      |
+      v
+Kubernetes Service
+      |
+      v
 Products Pod
 ```
 
-The important thing to understand is that the external client **does not communicate directly with the Products Pod**.
+The client never communicates directly with the Products microservice.
 
-Instead:
+---
 
-1. The request enters the AKS cluster through the API Gateway's `LoadBalancer`.
-2. Ocelot determines which microservice should handle the request.
-3. Ocelot uses the configured hostname, such as `products-microservice`.
-4. Kubernetes DNS resolves that name to the corresponding Kubernetes Service.
-5. The Service routes the request to one of the Products Pods.
+# Database Seeding
 
-### In short
+Database initialisation is handled using Kubernetes resources rather than Docker Compose startup behaviour.
 
-* **Deployment** → runs and manages the Pods.
-* **Service** → provides a stable network endpoint for the Pods.
-* **LoadBalancer** → exposes the API Gateway externally.
-* **ClusterIP** → keeps the other microservices internal to the cluster.
-* **Ocelot** → determines where API Gateway requests should be forwarded.
-* **Service name** → provides the hostname used for internal communication.
-* **Ocelot hostname and Kubernetes Service name must match**.
+Each database uses:
 
-For this repository, the important relationship to remember is:
+* Deployment - runs the database
+* Service - provides internal access
+* ConfigMap - stores seed scripts
+* Job - executes the seed process
 
-```text
-Ocelot
-  │
-  │ "products-microservice"
-  ▼
-Kubernetes Service
-  │
-  │ products-microservice
-  ▼
-Products Pod(s)
+---
+
+## MySQL
+
+Resources:
+
+```
+mysql-deployment.yaml
+mysql.service.yaml
+mysql-seed-configmap.yaml
+mysql-seed-job.yaml
 ```
 
-## Database Seeding in AKS
-
-Database seeding for AKS should be handled by Kubernetes resources, not by assuming Docker Compose runtime initialization is included in pushed base database images.
-
-For MySQL, use:
-
-* `aks/mysql-deployment.yaml`
-* `aks/mysql.service.yaml`
-* `aks/mysql-seed-configmap.yaml`
-* `aks/mysql-seed-job.yaml`
-
-Recommended apply order:
+Deploy:
 
 ```bash
 kubectl apply -f aks/mysql-deployment.yaml
@@ -310,20 +213,27 @@ kubectl apply -f aks/mysql-seed-configmap.yaml
 kubectl apply -f aks/mysql-seed-job.yaml
 ```
 
-Verify seed results:
+Verify:
 
 ```bash
-kubectl exec -n commercefabric-namespace deployment/mysql-deployment -- mysql -uroot -padmin -e "SHOW TABLES IN productDB; SELECT COUNT(*) AS ProductCount FROM productDB.Products;"
+kubectl exec -n commercefabric-namespace deployment/mysql-deployment -- \
+mysql -uroot -padmin -e "SHOW TABLES IN productDB;"
 ```
 
-For Postgres, use:
+---
 
-* `aks/postgres-deployment.yaml`
-* `aks/postgres.service.yaml`
-* `aks/postgres-seed-configmap.yaml`
-* `aks/postgres-seed-job.yaml`
+## PostgreSQL
 
-Recommended apply order:
+Resources:
+
+```
+postgres-deployment.yaml
+postgres.service.yaml
+postgres-seed-configmap.yaml
+postgres-seed-job.yaml
+```
+
+Deploy:
 
 ```bash
 kubectl apply -f aks/postgres-deployment.yaml
@@ -332,20 +242,27 @@ kubectl apply -f aks/postgres-seed-configmap.yaml
 kubectl apply -f aks/postgres-seed-job.yaml
 ```
 
-Verify seed results:
+Verify:
 
 ```bash
-kubectl exec -n commercefabric-namespace deployment/postgres-deployment -- psql -U postgres -d commercefabricUsers -c "\dt"
+kubectl exec -n commercefabric-namespace deployment/postgres-deployment -- \
+psql -U postgres -d commercefabricUsers -c "\dt"
 ```
 
-For MongoDB, use:
+---
 
-* `aks/mongodb-deployment.yaml`
-* `aks/mongodb.service.yaml`
-* `aks/mongodb-seed-configmap.yaml`
-* `aks/mongodb-seed-job.yaml`
+## MongoDB
 
-Recommended apply order:
+Resources:
+
+```
+mongodb-deployment.yaml
+mongodb.service.yaml
+mongodb-seed-configmap.yaml
+mongodb-seed-job.yaml
+```
+
+Deploy:
 
 ```bash
 kubectl apply -f aks/mongodb-deployment.yaml
@@ -354,8 +271,38 @@ kubectl apply -f aks/mongodb-seed-configmap.yaml
 kubectl apply -f aks/mongodb-seed-job.yaml
 ```
 
-Verify seed results:
+Verify:
 
 ```bash
-kubectl exec -n commercefabric-namespace deployment/mongodb-deployment -- mongosh --quiet --eval "db.getSiblingDB('OrdersDb').orders.countDocuments()"
+kubectl exec -n commercefabric-namespace deployment/mongodb-deployment -- \
+mongosh --quiet --eval "db.getSiblingDB('OrdersDb').orders.countDocuments()"
 ```
+
+---
+
+# Summary
+
+The important relationships are:
+
+```
+Deployment
+    |
+    v
+Pod
+    |
+    v
+Service
+    |
+    v
+Other services communicate using Service names
+```
+
+For this platform:
+
+* **Deployment** runs microservices.
+* **Service** provides stable internal networking.
+* **LoadBalancer** exposes the API Gateway.
+* **ClusterIP** keeps internal services private.
+* **Ocelot** routes API requests.
+* **Service names** provide the internal DNS names.
+* **Database Jobs** initialise database data.

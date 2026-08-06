@@ -1,4 +1,4 @@
-name: Deploy to AKS
+name: Deploy to Microservice AKS
 
 on:
 
@@ -7,7 +7,7 @@ on:
     inputs:
 
       service:
-        description: "Service to deploy"
+        description: "Service to deploy (orders/products/user/apigateway)"
         required: true
 
       image_tag:
@@ -19,6 +19,9 @@ on:
 
     types:
       - deploy-orders
+      - deploy-products
+      - deploy-user
+      - deploy-apigateway
 
 
 jobs:
@@ -53,19 +56,26 @@ jobs:
           --name ${{ secrets.AZURE_AKS_CLUSTER }}
 
 
-    - name: Deploy Orders
-      if: ${{ github.event.client_payload.service == 'orders' || github.event.inputs.service == 'orders' }}
+    - name: Deploy Microservice
       run: |
 
+        SERVICE="${{ github.event.client_payload.service || github.event.inputs.service }}"
+        IMAGE_TAG="${{ github.event.client_payload.image_tag || github.event.inputs.image_tag }}"
+
+        echo "Deploying service: $SERVICE"
+        echo "Image tag: $IMAGE_TAG"
+
         kubectl set image \
-        deployment/orders-microservice-deployment \
-        orders-microservice=commercefabricregistry.azurecr.io/orders-microservice:${{ github.event.client_payload.image_tag || github.event.inputs.image_tag }} \
-        -n commercefabric-namespace
+          deployment/${SERVICE}-microservice-deployment \
+          ${SERVICE}-microservice=commercefabricregistry.azurecr.io/${SERVICE}-microservice:${IMAGE_TAG} \
+          -n commercefabric-namespace
 
 
     - name: Verify deployment
       run: |
 
+        SERVICE="${{ github.event.client_payload.service || github.event.inputs.service }}"
+
         kubectl rollout status \
-        deployment/${{ github.event.client_payload.service || github.event.inputs.service }}-microservice-deployment \
-        -n commercefabric-namespace
+          deployment/${SERVICE}-microservice-deployment \
+          -n commercefabric-namespace
