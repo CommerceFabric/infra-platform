@@ -15,10 +15,14 @@ This repository manages:
 
 The CommerceFabric platform runs as a collection of independent Kubernetes workloads, with each microservice deployed separately into the `commercefabric-namespace` Kubernetes namespace.
 
+# Important SetUp
+
 > ℹ **Note:** if you are deploying the platform for the first time, ensure you have set up the required Azure resources: [SettingUpAzureResources](./docs/SettingUpAzureResources.md)
 
 > ℹ **Note:** if you are updating versions of external servicies (mongodb, postgresql, mysql, redis, rabbitmq, etc.) you will need to [Manually Push Docker Compose Images](./docs/PushDockerComposeImages.md)
 
+> 🔐 Note: before deploying any microservice that depends on external credentials (users-microservice), ensure the required Kubernetes Secrets have been created in the target AKS namespace. Deployment manifests reference these secrets via secretKeyRef, but the secret values themselves are not stored in source control for security reasons. 
+> Example command for creating the backend's entra client secret: `kubectl create secret generic users-microservice-secrets --namespace commercefabric-namespace --from-literal=COMMERCEFABRIC_AZURE_ENTRA_CLIENT_SECRET="your-real-secret"`
 ---
 
 # Repository Structure

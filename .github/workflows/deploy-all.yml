@@ -34,6 +34,21 @@ jobs:
             --name "${{ secrets.AZURE_AKS_CLUSTER }}" \
             --overwrite-existing
 
+      - name: Configure User Service secrets
+        if: ${{ (github.event.client_payload.service || github.event.inputs.service) == 'users' }}
+        run: |
+          if [ -z "${{ secrets.AZURE_ENTRA_CLIENT_SECRET }}" ]; then
+            echo "AZURE_ENTRA_CLIENT_SECRET is not configured"
+            exit 1
+          fi
+
+          kubectl create secret generic users-microservice-secrets \
+            --namespace commercefabric-namespace \
+            --from-literal=COMMERCEFABRIC_AZURE_ENTRA_CLIENT_SECRET="${{ secrets.AZURE_ENTRA_CLIENT_SECRET }}" \
+            --dry-run=client \
+            -o yaml \
+            | kubectl apply -f -
+
       - name: Apply Kubernetes manifests
         run: |
           set -euo pipefail
