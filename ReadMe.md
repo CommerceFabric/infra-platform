@@ -120,6 +120,7 @@ This is triggered either:
               └──────────────────────────────────────────┘
 ```
 
+> Note: The database seeding only creates the expected table structure - if you want dummy data to be inserted into the database for testing, you can run `kubectl apply -f aks_seedDummyData/` to seed the database with sample data.
 ---
 
 ## Azure Authentication
