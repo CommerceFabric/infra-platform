@@ -1,75 +1,279 @@
 name: Deploy All Services to AKS
 
 on:
-
   workflow_dispatch:
 
-
 jobs:
-
   deploy:
-
     runs-on: ubuntu-latest
 
     permissions:
       id-token: write
       contents: read
 
+    env:
+      NAMESPACE: commercefabric-namespace
+      ROLLOUT_TIMEOUT: 5m
+      JOB_TIMEOUT: 5m
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    - name: Checkout
-      uses: actions/checkout@v4
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
+      - name: Connect to AKS
+        run: |
+          az aks get-credentials \
+            --resource-group "${{ secrets.AZURE_RESOURCE_GROUP }}" \
+            --name "${{ secrets.AZURE_AKS_CLUSTER }}" \
+            --overwrite-existing
 
-    - name: Azure Login
-      uses: azure/login@v2
-      with:
-        client-id: ${{ secrets.AZURE_CLIENT_ID }}
-        tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-        subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Apply Kubernetes manifests
+        run: |
+          set -euo pipefail
 
+          echo "Applying Kubernetes manifests..."
+          kubectl apply -f aks/
 
-    - name: Connect to AKS
-      run: |
-        az aks get-credentials \
-          --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
-          --name ${{ secrets.AZURE_AKS_CLUSTER }}
+      # ------------------------------------------------------------
+      # Check every Deployment in the namespace
+      # ------------------------------------------------------------
+      - name: Verify all deployments
+        id: deployments
+        shell: bash
+        run: |
+          set +e
 
+          FAILED=0
 
-    - name: Apply Kubernetes manifests
-      run: |
+          echo "Finding deployments in namespace: $NAMESPACE"
 
-        kubectl apply -f aks/
+          DEPLOYMENTS=$(kubectl get deployments \
+            -n "$NAMESPACE" \
+            -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')
 
+          if [ -z "$DEPLOYMENTS" ]; then
+            echo "::error::No deployments found in namespace $NAMESPACE"
+            exit 1
+          fi
 
-    - name: Wait for Orders rollout
-      run: |
+          while IFS= read -r deployment; do
+            [ -z "$deployment" ] && continue
 
-        kubectl rollout status \
-          deployment/orders-microservice-deployment \
-          -n commercefabric-namespace
+            echo ""
+            echo "=================================================="
+            echo "Checking deployment: $deployment"
+            echo "=================================================="
 
+            if kubectl rollout status \
+              "deployment/$deployment" \
+              -n "$NAMESPACE" \
+              --timeout="$ROLLOUT_TIMEOUT"; then
 
-    - name: Wait for Products rollout
-      run: |
+              echo "✅ $deployment deployed successfully"
 
-        kubectl rollout status \
-          deployment/products-microservice-deployment \
-          -n commercefabric-namespace
+              echo "### ✅ Deployment: \`$deployment\`" >> "$GITHUB_STEP_SUMMARY"
+              echo "Rollout completed successfully." >> "$GITHUB_STEP_SUMMARY"
+              echo "" >> "$GITHUB_STEP_SUMMARY"
 
+            else
+              echo "::error title=Deployment failed::$deployment did not successfully roll out"
+              echo "❌ $deployment failed"
+              FAILED=1
 
-    - name: Wait for User rollout
-      run: |
+              echo "### ❌ Deployment: \`$deployment\`" >> "$GITHUB_STEP_SUMMARY"
+              echo "Rollout failed or timed out." >> "$GITHUB_STEP_SUMMARY"
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+            fi
 
-        kubectl rollout status \
-          deployment/user-microservice-deployment \
-          -n commercefabric-namespace
+          done <<< "$DEPLOYMENTS"
 
+          if [ "$FAILED" -ne 0 ]; then
+            exit 1
+          fi
 
-    - name: Show deployed images
-      run: |
+      # ------------------------------------------------------------
+      # Check every Job in the namespace
+      # e.g. mongodb-seed-job, mysql-seed-job, postgres-seed-job
+      # ------------------------------------------------------------
+      - name: Verify all jobs
+        id: jobs
+        if: always()
+        shell: bash
+        run: |
+          set +e
 
-        kubectl get pods \
-          -n commercefabric-namespace \
-          -o jsonpath="{range .items[*]}{.metadata.name}{': '}{.status.containerStatuses[0].image}{'\n'}{end}"
+          FAILED=0
+
+          echo "Finding jobs in namespace: $NAMESPACE"
+
+          JOBS=$(kubectl get jobs \
+            -n "$NAMESPACE" \
+            -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')
+
+          if [ -z "$JOBS" ]; then
+            echo "No jobs found."
+            echo "### ℹ️ Kubernetes Jobs" >> "$GITHUB_STEP_SUMMARY"
+            echo "No jobs found in namespace." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          while IFS= read -r job; do
+            [ -z "$job" ] && continue
+
+            echo ""
+            echo "=================================================="
+            echo "Checking job: $job"
+            echo "=================================================="
+
+            if kubectl wait \
+              --for=condition=complete \
+              "job/$job" \
+              -n "$NAMESPACE" \
+              --timeout="$JOB_TIMEOUT"; then
+
+              echo "✅ $job completed successfully"
+
+              echo "### ✅ Job: \`$job\`" >> "$GITHUB_STEP_SUMMARY"
+              echo "Job completed successfully." >> "$GITHUB_STEP_SUMMARY"
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+
+            else
+              echo "::error title=Kubernetes Job failed::$job did not complete successfully"
+              echo "❌ $job failed or timed out"
+              FAILED=1
+
+              echo "### ❌ Job: \`$job\`" >> "$GITHUB_STEP_SUMMARY"
+              echo "Job failed or timed out." >> "$GITHUB_STEP_SUMMARY"
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+
+              echo "--- Job details ---"
+              kubectl describe "job/$job" -n "$NAMESPACE" || true
+
+              echo "--- Job logs ---"
+              kubectl logs \
+                -n "$NAMESPACE" \
+                "job/$job" \
+                --all-containers=true \
+                --tail=200 || true
+            fi
+
+          done <<< "$JOBS"
+
+          if [ "$FAILED" -ne 0 ]; then
+            exit 1
+          fi
+
+      # ------------------------------------------------------------
+      # Show everything after deployment
+      # ------------------------------------------------------------
+      - name: Show deployment status
+        if: always()
+        run: |
+          echo "=================================================="
+          echo "DEPLOYMENTS"
+          echo "=================================================="
+          kubectl get deployments \
+            -n "$NAMESPACE" \
+            -o wide
+
+          echo ""
+          echo "=================================================="
+          echo "PODS"
+          echo "=================================================="
+          kubectl get pods \
+            -n "$NAMESPACE" \
+            -o wide
+
+          echo ""
+          echo "=================================================="
+          echo "SERVICES"
+          echo "=================================================="
+          kubectl get services \
+            -n "$NAMESPACE"
+
+          echo ""
+          echo "=================================================="
+          echo "JOBS"
+          echo "=================================================="
+          kubectl get jobs \
+            -n "$NAMESPACE"
+
+      - name: Show deployed images
+        if: always()
+        run: |
+          kubectl get pods \
+            -n "$NAMESPACE" \
+            -o jsonpath="{range .items[*]}{.metadata.name}{': '}{range .status.containerStatuses[*]}{.image}{' '}{end}{'\n'}{end}"
+
+      # ------------------------------------------------------------
+      # Extra diagnostics if something failed
+      # ------------------------------------------------------------
+      - name: Deployment failure diagnostics
+        if: failure()
+        shell: bash
+        run: |
+          echo "::error::One or more Kubernetes resources failed to deploy correctly"
+
+          echo ""
+          echo "=================================================="
+          echo "PODS"
+          echo "=================================================="
+          kubectl get pods \
+            -n "$NAMESPACE" \
+            -o wide || true
+
+          echo ""
+          echo "=================================================="
+          echo "RECENT EVENTS"
+          echo "=================================================="
+          kubectl get events \
+            -n "$NAMESPACE" \
+            --sort-by='.lastTimestamp' || true
+
+          echo ""
+          echo "=================================================="
+          echo "POD DETAILS"
+          echo "=================================================="
+
+          kubectl get pods \
+            -n "$NAMESPACE" \
+            -o name |
+          while read -r pod; do
+            echo ""
+            echo "---------------- $pod ----------------"
+            kubectl describe "$pod" -n "$NAMESPACE" || true
+          done
+
+          echo ""
+          echo "=================================================="
+          echo "FAILED POD LOGS"
+          echo "=================================================="
+
+          kubectl get pods \
+            -n "$NAMESPACE" \
+            --field-selector=status.phase!=Running,status.phase!=Succeeded \
+            -o name |
+          while read -r pod; do
+            [ -z "$pod" ] && continue
+
+            echo ""
+            echo "---------------- $pod ----------------"
+
+            kubectl logs \
+              "$pod" \
+              -n "$NAMESPACE" \
+              --all-containers=true \
+              --tail=200 || true
+          done
+
+          echo "## ❌ Deployment failed" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "One or more Kubernetes Deployments or Jobs failed." >> "$GITHUB_STEP_SUMMARY"
+          echo "Check the failed workflow steps and diagnostics above." >> "$GITHUB_STEP_SUMMARY"
