@@ -34,8 +34,21 @@ jobs:
             --name "${{ secrets.AZURE_AKS_CLUSTER }}" \
             --overwrite-existing
 
-      - name: Configure User Service secrets
-        if: ${{ (github.event.client_payload.service || github.event.inputs.service) == 'users' }}
+      - name: Configure Azure Service Bus secret
+        run: |
+          if [ -z "${{ secrets.AZURE_SERVICEBUS_CONNECTION }}" ]; then
+            echo "AZURE_SERVICEBUS_CONNECTION is not configured"
+            exit 1
+          fi
+
+          kubectl create secret generic azurebus-microservice-secrets \
+            --namespace "$NAMESPACE" \
+            --from-literal=AZURE_SERVICEBUS_CONNECTION="${{ secrets.AZURE_SERVICEBUS_CONNECTION }}" \
+            --dry-run=client \
+            -o yaml \
+            | kubectl apply -f -
+
+      - name: Configure User Service secret
         run: |
           if [ -z "${{ secrets.AZURE_ENTRA_CLIENT_SECRET }}" ]; then
             echo "AZURE_ENTRA_CLIENT_SECRET is not configured"
@@ -43,7 +56,7 @@ jobs:
           fi
 
           kubectl create secret generic users-microservice-secrets \
-            --namespace commercefabric-namespace \
+            --namespace "$NAMESPACE" \
             --from-literal=COMMERCEFABRIC_AZURE_ENTRA_CLIENT_SECRET="${{ secrets.AZURE_ENTRA_CLIENT_SECRET }}" \
             --dry-run=client \
             -o yaml \

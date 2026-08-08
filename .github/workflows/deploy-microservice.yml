@@ -1,116 +1,111 @@
 name: Deploy to Microservice AKS
 
 on:
-
   workflow_dispatch:
-
     inputs:
-
       service:
-        description: "Service to deploy (orders/products/user/apigateway)"
+        description: "Service to deploy (orders/products/users/apigateway)"
         required: true
 
       image_tag:
         description: "Docker image tag"
         required: true
 
-
   repository_dispatch:
-
     types:
       - deploy-orders
       - deploy-products
       - deploy-user
       - deploy-apigateway
 
-
 jobs:
-
   deploy:
-
     runs-on: ubuntu-latest
 
     permissions:
       id-token: write
       contents: read
 
+    env:
+      NAMESPACE: commercefabric-namespace
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    - name: Checkout
-      uses: actions/checkout@v4
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
+      - name: Connect to AKS
+        run: |
+          az aks get-credentials \
+            --resource-group "${{ secrets.AZURE_RESOURCE_GROUP }}" \
+            --name "${{ secrets.AZURE_AKS_CLUSTER }}" \
+            --overwrite-existing
 
-    - name: Azure Login
-      uses: azure/login@v2
-      with:
-        client-id: ${{ secrets.AZURE_CLIENT_ID }}
-        tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-        subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Configure Azure Service Bus secret
+        run: |
+          if [ -z "${{ secrets.AZURE_SERVICEBUS_CONNECTION }}" ]; then
+            echo "AZURE_SERVICEBUS_CONNECTION is not configured"
+            exit 1
+          fi
 
-    - name: Connect to AKS
-      run: |
-        az aks get-credentials \
-          --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
-          --name ${{ secrets.AZURE_AKS_CLUSTER }}
+          kubectl create secret generic azurebus-microservice-secrets \
+            --namespace "$NAMESPACE" \
+            --from-literal=AZURE_SERVICEBUS_CONNECTION="${{ secrets.AZURE_SERVICEBUS_CONNECTION }}" \
+            --dry-run=client \
+            -o yaml \
+            | kubectl apply -f -
 
-    - name: Configure User Service secrets
-      if: ${{ (github.event.client_payload.service || github.event.inputs.service) == 'users' }}
-      run: |
-        if [ -z "${{ secrets.AZURE_ENTRA_CLIENT_SECRET }}" ]; then
-          echo "AZURE_ENTRA_CLIENT_SECRET is not configured"
-          exit 1
-        fi
+      - name: Configure User Service secret
+        if: ${{ (github.event.client_payload.service || github.event.inputs.service) == 'users' }}
+        run: |
+          if [ -z "${{ secrets.AZURE_ENTRA_CLIENT_SECRET }}" ]; then
+            echo "AZURE_ENTRA_CLIENT_SECRET is not configured"
+            exit 1
+          fi
 
-        kubectl create secret generic users-microservice-secrets \
-          --namespace commercefabric-namespace \
-          --from-literal=COMMERCEFABRIC_AZURE_ENTRA_CLIENT_SECRET="${{ secrets.AZURE_ENTRA_CLIENT_SECRET }}" \
-          --dry-run=client \
-          -o yaml \
-          | kubectl apply -f -
+          kubectl create secret generic users-microservice-secrets \
+            --namespace "$NAMESPACE" \
+            --from-literal=COMMERCEFABRIC_AZURE_ENTRA_CLIENT_SECRET="${{ secrets.AZURE_ENTRA_CLIENT_SECRET }}" \
+            --dry-run=client \
+            -o yaml \
+            | kubectl apply -f -
 
-    - name: Deploy Service
-      run: |
+      - name: Deploy Service
+        run: |
+          SERVICE="${{ github.event.client_payload.service || github.event.inputs.service }}"
+          IMAGE_TAG="${{ github.event.client_payload.image_tag || github.event.inputs.image_tag }}"
 
-        SERVICE="${{ github.event.client_payload.service || github.event.inputs.service }}"
-        IMAGE_TAG="${{ github.event.client_payload.image_tag || github.event.inputs.image_tag }}"
+          echo "Deploying service: $SERVICE"
+          echo "Image tag: $IMAGE_TAG"
 
-        echo "Deploying service: $SERVICE"
-        echo "Image tag: $IMAGE_TAG"
+          if [ "$SERVICE" = "apigateway" ]; then
+            kubectl set image \
+              deployment/apigateway-deployment \
+              apigateway=commercefabricregistry.azurecr.io/apigateway:${IMAGE_TAG} \
+              -n "$NAMESPACE"
+          else
+            kubectl set image \
+              deployment/${SERVICE}-microservice-deployment \
+              ${SERVICE}-microservice=commercefabricregistry.azurecr.io/${SERVICE}-microservice:${IMAGE_TAG} \
+              -n "$NAMESPACE"
+          fi
 
+      - name: Verify deployment
+        run: |
+          SERVICE="${{ github.event.client_payload.service || github.event.inputs.service }}"
 
-        if [ "$SERVICE" = "apigateway" ]; then
-
-          kubectl set image \
-            deployment/apigateway-deployment \
-            apigateway=commercefabricregistry.azurecr.io/apigateway:${IMAGE_TAG} \
-            -n commercefabric-namespace
-
-        else
-
-          kubectl set image \
-            deployment/${SERVICE}-microservice-deployment \
-            ${SERVICE}-microservice=commercefabricregistry.azurecr.io/${SERVICE}-microservice:${IMAGE_TAG} \
-            -n commercefabric-namespace
-
-        fi
-
-
-    - name: Verify deployment
-      run: |
-
-        SERVICE="${{ github.event.client_payload.service || github.event.inputs.service }}"
-
-        if [ "$SERVICE" = "apigateway" ]; then
-
-          kubectl rollout status \
-            deployment/apigateway-deployment \
-            -n commercefabric-namespace
-
-        else
-
-          kubectl rollout status \
-            deployment/${SERVICE}-microservice-deployment \
-            -n commercefabric-namespace
-
-        fi
+          if [ "$SERVICE" = "apigateway" ]; then
+            kubectl rollout status \
+              deployment/apigateway-deployment \
+              -n "$NAMESPACE"
+          else
+            kubectl rollout status \
+              deployment/${SERVICE}-microservice-deployment \
+              -n "$NAMESPACE"
+          fi

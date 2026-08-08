@@ -43,3 +43,8 @@ spec:
           value: guest
         - name: RABBITMQ_PRODUCTS_EXCHANGE
           value: products.exchange
+        - name: AZURE_SERVICEBUS_CONNECTION
+          valueFrom:
+            secretKeyRef:
+              name: azurebus-microservice-secrets
+              key: AZURE_SERVICEBUS_CONNECTION # Create this secret in aks via kubectl create secret generic azurebus-microservice-secrets --namespace commercefabric-namespace  --from-literal=AZURE_SERVICEBUS_CONNECTION="your-real-secret"
