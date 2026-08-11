@@ -16,35 +16,35 @@ spec:
         app: products-microservice
     spec:
       containers:
-      - name: products-microservice
-        image: commercefabricregistry.azurecr.io/products-microservice:latest
-        ports:
-        - containerPort: 8080
-        env:
-        - name: ASPNETCORE_ENVIRONMENT
-          value: Development
-        - name: COMMERCEFABRIC_PRODUCTSERVICE_DB_HOST
-          value: mysql
-        - name: COMMERCEFABRIC_PRODUCTSERVICE_DB_PORT
-          value: "3306"
-        - name: COMMERCEFABRIC_PRODUCTSERVICE_DB_NAME
-          value: productDB
-        - name: COMMERCEFABRIC_PRODUCTSERVICE_DB_USER
-          value: root
-        - name: COMMERCEFABRIC_PRODUCTSERVICE_DB_PASSWORD
-          value: admin
-        - name: RABBITMQ_HOST
-          value: rabbitmq
-        - name: RABBITMQ_PORT
-          value: "5672"
-        - name: RABBITMQ_USER
-          value: guest
-        - name: RABBITMQ_PASSWORD
-          value: guest
-        - name: RABBITMQ_PRODUCTS_EXCHANGE
-          value: products.exchange
-        - name: AZURE_SERVICEBUS_CONNECTION
-          valueFrom:
-            secretKeyRef:
-              name: azurebus-microservice-secrets
-              key: AZURE_SERVICEBUS_CONNECTION # Create this secret in aks via kubectl create secret generic azurebus-microservice-secrets --namespace commercefabric-namespace  --from-literal=AZURE_SERVICEBUS_CONNECTION="your-real-secret"
+        - name: products-microservice
+          image: commercefabricregistry.azurecr.io/products-microservice:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: ASPNETCORE_ENVIRONMENT
+              value: Development
+            - name: COMMERCEFABRIC_PRODUCTSERVICE_DB_HOST
+              value: mysql
+            - name: COMMERCEFABRIC_PRODUCTSERVICE_DB_PORT
+              value: "3306"
+            - name: COMMERCEFABRIC_PRODUCTSERVICE_DB_NAME
+              value: productDB
+            - name: COMMERCEFABRIC_PRODUCTSERVICE_DB_USER
+              value: root
+            - name: COMMERCEFABRIC_PRODUCTSERVICE_DB_PASSWORD
+              value: admin
+            - name: RABBITMQ_HOST
+              value: rabbitmq
+            - name: RABBITMQ_PORT
+              value: "5672"
+            - name: RABBITMQ_USER
+              value: guest
+            - name: RABBITMQ_PASSWORD
+              value: guest
+            - name: RABBITMQ_PRODUCTS_EXCHANGE
+              value: products.exchange
+            - name: SERVICEBUS_CONNECTION_STRING
+              valueFrom:
+                secretKeyRef:
+                  name: azurebus-microservice-secrets
+                  key: AZURE_SERVICEBUS_CONNECTION # Create this secret in aks via kubectl create secret generic azurebus-microservice-secrets --namespace commercefabric-namespace  --from-literal=AZURE_SERVICEBUS_CONNECTION="your-real-secret"

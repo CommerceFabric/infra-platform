@@ -16,49 +16,49 @@ spec:
         app: orders-microservice
     spec:
       containers:
-      - name: orders-microservice
-        image: commercefabricregistry.azurecr.io/orders-microservice:latest
-        ports:
-        - containerPort: 8080
-        env:
-        - name: ASPNETCORE_ENVIRONMENT
-          value: Development
-        - name: ASPNETCORE_HTTP_PORT
-          value: "8080"
-        - name: ORDERS_MONGODB_HOST
-          value: mongodb
-        - name: ORDERS_MONGODB_PORT
-          value: "27017"
-        - name: MONGODB_DATABASE
-          value: OrdersDb
-        - name: USERS_MICROSERVICE_HOST
-          value: apigateway
-        - name: USERS_MICROSERVICE_PORT
-          value: "8080"
-        - name: USERS_MICROSERVICE_SCHEME
-          value: http
-        - name: PRODUCTS_MICROSERVICE_HOST
-          value: apigateway
-        - name: PRODUCTS_MICROSERVICE_PORT
-          value: "8080"
-        - name: PRODUCTS_MICROSERVICE_SCHEME
-          value: http
-        - name: REDIS_HOST
-          value: redis
-        - name: REDIS_PORT
-          value: "6379"
-        - name: RABBITMQ_HOST
-          value: rabbitmq
-        - name: RABBITMQ_PORT
-          value: "5672"
-        - name: RABBITMQ_USER
-          value: guest
-        - name: RABBITMQ_PASSWORD
-          value: guest
-        - name: RABBITMQ_PRODUCTS_EXCHANGE
-          value: products.exchange
-        - name: AZURE_SERVICEBUS_CONNECTION
-          valueFrom:
-            secretKeyRef:
-              name: azurebus-microservice-secrets
-              key: AZURE_SERVICEBUS_CONNECTION # Create this secret in aks via kubectl create secret generic azurebus-microservice-secrets --namespace commercefabric-namespace  --from-literal=AZURE_SERVICEBUS_CONNECTION="your-real-secret"
+        - name: orders-microservice
+          image: commercefabricregistry.azurecr.io/orders-microservice:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: ASPNETCORE_ENVIRONMENT
+              value: Development
+            - name: ASPNETCORE_HTTP_PORT
+              value: "8080"
+            - name: ORDERS_MONGODB_HOST
+              value: mongodb
+            - name: ORDERS_MONGODB_PORT
+              value: "27017"
+            - name: MONGODB_DATABASE
+              value: OrdersDb
+            - name: USERS_MICROSERVICE_HOST
+              value: apigateway
+            - name: USERS_MICROSERVICE_PORT
+              value: "8080"
+            - name: USERS_MICROSERVICE_SCHEME
+              value: http
+            - name: PRODUCTS_MICROSERVICE_HOST
+              value: apigateway
+            - name: PRODUCTS_MICROSERVICE_PORT
+              value: "8080"
+            - name: PRODUCTS_MICROSERVICE_SCHEME
+              value: http
+            - name: REDIS_HOST
+              value: redis
+            - name: REDIS_PORT
+              value: "6379"
+            - name: RABBITMQ_HOST
+              value: rabbitmq
+            - name: RABBITMQ_PORT
+              value: "5672"
+            - name: RABBITMQ_USER
+              value: guest
+            - name: RABBITMQ_PASSWORD
+              value: guest
+            - name: RABBITMQ_PRODUCTS_EXCHANGE
+              value: products.exchange
+            - name: SERVICEBUS_CONNECTION_STRING
+              valueFrom:
+                secretKeyRef:
+                  name: azurebus-microservice-secrets
+                  key: AZURE_SERVICEBUS_CONNECTION # Create this secret in aks via kubectl create secret generic azurebus-microservice-secrets --namespace commercefabric-namespace  --from-literal=AZURE_SERVICEBUS_CONNECTION="your-real-secret"
