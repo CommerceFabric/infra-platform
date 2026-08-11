@@ -47,7 +47,12 @@ jobs:
             --name "${{ secrets.AZURE_AKS_CLUSTER }}" \
             --overwrite-existing
 
+      # ==========================================
+      # Azure Service Bus secret
+      # Used by Orders and Products services
+      # ==========================================
       - name: Configure Azure Service Bus secret
+        if: ${{ (github.event.client_payload.service || github.event.inputs.service) == 'orders' || (github.event.client_payload.service || github.event.inputs.service) == 'products' }}
         run: |
           if [ -z "${{ secrets.AZURE_SERVICEBUS_CONNECTION }}" ]; then
             echo "AZURE_SERVICEBUS_CONNECTION is not configured"
@@ -61,6 +66,23 @@ jobs:
             -o yaml \
             | kubectl apply -f -
 
+      # ==========================================
+      # Inject Azure Service Bus secret
+      # into Orders / Products deployments
+      # ==========================================
+      - name: Configure Azure Service Bus environment variable
+        if: ${{ (github.event.client_payload.service || github.event.inputs.service) == 'orders' || (github.event.client_payload.service || github.event.inputs.service) == 'products' }}
+        run: |
+          SERVICE="${{ github.event.client_payload.service || github.event.inputs.service }}"
+
+          kubectl set env \
+            deployment/${SERVICE}-microservice-deployment \
+            AZURE_SERVICEBUS_CONNECTION=secretKeyRef:azurebus-microservice-secrets:AZURE_SERVICEBUS_CONNECTION \
+            -n "$NAMESPACE"
+
+      # ==========================================
+      # User Service secret
+      # ==========================================
       - name: Configure User Service secret
         if: ${{ (github.event.client_payload.service || github.event.inputs.service) == 'users' }}
         run: |
@@ -76,6 +98,9 @@ jobs:
             -o yaml \
             | kubectl apply -f -
 
+      # ==========================================
+      # Deploy selected service
+      # ==========================================
       - name: Deploy Service
         run: |
           SERVICE="${{ github.event.client_payload.service || github.event.inputs.service }}"
@@ -96,6 +121,9 @@ jobs:
               -n "$NAMESPACE"
           fi
 
+      # ==========================================
+      # Verify deployment
+      # ==========================================
       - name: Verify deployment
         run: |
           SERVICE="${{ github.event.client_payload.service || github.event.inputs.service }}"
