@@ -1,26 +1,44 @@
 targetScope = 'resourceGroup'
 
-@description('Azure deployment region')
+
+@description('Azure deployment region. Use an Azure region name such as "uksouth". You can list valid regions with: az account list-locations --query "[].name" -o tsv')
 param location string = 'uksouth'
 
-@description('Prefix used for CommerceFabric Azure resources')
+
+@description('Prefix used when naming CommerceFabric Azure resources. Choose a short, lowercase project/environment name such as "commercefabric" or "commercefabric-test".')
 param projectName string = 'commercefabric'
 
-@description('Object/principal ID of the GitHub Actions service principal')
+
+@description('AKS cluster name. Choose a unique name within the target resource group, for example "commercefabric-aks-cluster". You can see existing AKS cluster names with: az aks list --query "[].name" -o tsv')
+param aksClusterName string = '${projectName}-aks-cluster'
+
+
+@description('AKS DNS prefix used to generate the managed cluster DNS name. Choose a short DNS-safe value such as "commercefabric". For a new cluster this can be chosen freely; it cannot normally be changed after the AKS cluster has been created.')
+param aksDnsPrefix string = projectName
+
+
+@description('Azure Service Bus namespace name. This must be globally unique across Azure. Choose a DNS-safe name such as "commercefabric-servicebus-namespace". Existing namespaces can be listed with: az servicebus namespace list --query "[].name" -o tsv')
+param serviceBusNamespaceName string = '${projectName}-servicebus-namespace'
+
+
+@description('Azure Container Registry name. This must be globally unique, contain only lowercase letters and numbers, and be 5-50 characters long. Example: "commercefabricregistry". Check availability with: az acr check-name --name <NAME>')
+param acrName string = 'commercefabricregistry'
+
+
+@description('Azure API Management service name. This name forms the public hostname https://<name>.azure-api.net and must be globally unique. Example: "commercefabricapimanagement". Existing APIM services can be listed with: az apim list --query "[].name" -o tsv')
+param apimName string = 'commercefabricapimanagement'
+
+
+@description('Microsoft Entra service principal OBJECT ID used by GitHub Actions for Azure OIDC deployments and RBAC assignments. This is NOT the application/client ID. Find it with: az ad sp show --id <AZURE_CLIENT_ID> --query id -o tsv')
 param githubDeploymentPrincipalId string
 
-@description('SSH public key used by the AKS Linux nodes')
+
+@description('SSH PUBLIC key used for the AKS Linux node administrator account. Use the contents of a .pub file only; never provide the private key. Generate one with: ssh-keygen -t ed25519 -f "$HOME\\.ssh\\commercefabric-aks" -C "commercefabric-aks". Then read it with: Get-Content "$HOME\\.ssh\\commercefabric-aks.pub"')
 param aksSshPublicKey string
 
-
 // ============================================================
-// Stable resource names
+// Common configuration
 // ============================================================
-
-var serviceBusNamespaceName = '${projectName}-servicebus-namespace'
-var acrName = 'commercefabricregistry'
-var aksClusterName = '${projectName}-aks-cluster'
-
 
 var commonTags = {
   project: 'CommerceFabric'
@@ -66,7 +84,7 @@ module aks './modules/aks.bicep' = {
   params: {
     clusterName: aksClusterName
     location: location
-    dnsPrefix: projectName
+    dnsPrefix: aksDnsPrefix
     sshPublicKey: aksSshPublicKey
     tags: commonTags
   }
@@ -74,21 +92,18 @@ module aks './modules/aks.bicep' = {
 
 
 // ============================================================
-// Resource references used as RBAC scopes
-//
-// IMPORTANT:
-// These names are known before deployment starts.
-// Do not use module outputs here.
+// API Management
 // ============================================================
 
-resource acr 'Microsoft.ContainerRegistry/registries@2025-11-01' existing = {
-  name: acrName
+module apim './modules/apim.bicep' = {
+  name: 'commercefabric-apim'
+  params: {
+    apimName: apimName
+    location: 'ukwest'
+    publisherEmail: 'danielmusselwhite@outlook.com'
+    tags: commonTags
+  }
 }
-
-resource aksResource 'Microsoft.ContainerService/managedClusters@2026-01-01' existing = {
-  name: aksClusterName
-}
-
 
 // ============================================================
 // Built-in Azure role IDs
@@ -108,75 +123,6 @@ var aksClusterUserRoleDefinitionId = subscriptionResourceId(
   'Microsoft.Authorization/roleDefinitions',
   '4abbcc35-e782-43d8-92c5-2d3f1bd2253f'
 )
-
-
-// ============================================================
-// AKS -> ACR AcrPull
-//
-// kubeletObjectId is runtime-generated, so it is fine in
-// properties.principalId.
-//
-// It must NOT be used to generate the role-assignment name.
-// ============================================================
-
-resource aksAcrPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(
-    acr.id,
-    aksClusterName,
-    'AcrPull'
-  )
-
-  scope: acr
-
-  properties: {
-    roleDefinitionId: acrPullRoleDefinitionId
-    principalId: aks.outputs.kubeletObjectId
-    principalType: 'ServicePrincipal'
-  }
-}
-
-
-// ============================================================
-// GitHub Actions -> ACR AcrPush
-// ============================================================
-
-resource githubAcrPush 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(
-    acr.id,
-    githubDeploymentPrincipalId,
-    acrPushRoleDefinitionId
-  )
-
-  scope: acr
-
-  properties: {
-    roleDefinitionId: acrPushRoleDefinitionId
-    principalId: githubDeploymentPrincipalId
-    principalType: 'ServicePrincipal'
-  }
-}
-
-
-// ============================================================
-// GitHub Actions -> AKS Cluster User
-// ============================================================
-
-resource githubAksClusterUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(
-    aksResource.id,
-    githubDeploymentPrincipalId,
-    aksClusterUserRoleDefinitionId
-  )
-
-  scope: aksResource
-
-  properties: {
-    roleDefinitionId: aksClusterUserRoleDefinitionId
-    principalId: githubDeploymentPrincipalId
-    principalType: 'ServicePrincipal'
-  }
-}
-
 
 // ============================================================
 // Outputs
@@ -207,23 +153,6 @@ output productsUpdatesOrdersSubscription string = serviceBus.outputs.productsUpd
 @secure()
 output AZURE_SERVICEBUS_CONNECTION string = serviceBus.outputs.connectionString
 
-
-// ============================================================
-// API Management Service
-// ============================================================
-// ============================================================
-// API Management
-// ============================================================
-
-module apim './modules/apim.bicep' = {
-  name: 'commercefabric-apim'
-  params: {
-    apimName: 'commercefabricapimanagement'
-    location: 'ukwest'
-    publisherEmail: 'danielmusselwhite@outlook.com'
-    tags: commonTags
-  }
-}
-
 output APIM_NAME string = apim.outputs.apimName
+
 output APIM_GATEWAY_URL string = apim.outputs.gatewayUrl

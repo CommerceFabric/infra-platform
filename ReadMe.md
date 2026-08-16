@@ -1,221 +1,306 @@
-# infra-platform (CommerceFabric)
+# CommerceFabric Infrastructure Platform
 
-The **infra-platform** repository contains the infrastructure-as-code, Kubernetes manifests, and deployment automation required to run the CommerceFabric platform on **Microsoft Azure Kubernetes Service (AKS)**.
+The **infra-platform** repository contains the Infrastructure as Code (IaC), Kubernetes manifests, and deployment automation used to run the CommerceFabric distributed system on Microsoft Azure.
 
-This repository is responsible for the **continuous deployment (CD)** side of the platform. Microservice repositories are responsible for building, testing, and publishing container images, while this repository manages deploying those images into the AKS environment.
+It is responsible for provisioning the Azure infrastructure and deploying the CommerceFabric microservices and supporting services into Azure Kubernetes Service (AKS).
 
-This repository manages:
+## Architecture
 
-- Kubernetes manifests for platform services
-- Application deployments and service configuration
-- Azure Kubernetes Service (AKS) deployment configuration
-- GitHub Actions deployment workflows
-- Azure authentication configuration using Workload Identity Federation (OIDC)
-- Deployment documentation and operational guidance
+CommerceFabric uses the following Azure architecture:
 
-The CommerceFabric platform runs as a collection of independent Kubernetes workloads, with each microservice deployed separately into the `commercefabric-namespace` Kubernetes namespace.
+todo - generate a diagram showing the azure architecture + another sequence diagram to show the CI/CD flow
 
-# Important SetUp
+### Azure Resources
 
-> ℹ **Note:** if you are deploying the platform for the first time, ensure you have set up the required Azure resources: [SettingUpAzureResources](./docs/SettingUpAzureResources.md)
-
-> ℹ **Note:** if you are updating versions of external servicies (mongodb, postgresql, mysql, redis, rabbitmq, etc.) you will need to [Manually Push Docker Compose Images](./docs/PushDockerComposeImages.md)
-
-> 🔐 Note: before deploying any microservice that depends on secret values within their kubernetes manifests, ensure the required Kubernetes Secrets have been created in the target AKS namespace; as these deployment manifests reference these secrets via secretKeyRef, but the secret values themselves are not stored in source control for security reasons. 
->Example command: 
->```powershell
->kubectl create secret generic azurebus-microservice-secrets --namespace commercefabric-namespace --from-literal=AZURE_SERVICEBUS_CONNECTION="your-real-secret"
->kubectl create secret generic users-microservice-secrets --namespace commercefabric-namespace --from-literal=COMMERCEFABRIC_AZURE_ENTRA_CLIENT_SECRET="your-real-secret"
->```
-
----
-
-# Repository Structure
-
-```
-infra-platform/
-│
-├── aks/             # Kubernetes manifests
-|
-├── .github/
-│   └── workflows/   # GitHub Actions CI/CD workflows
-```
-
----
-
-# GitHub Actions CI/CD Workflows
-
-The repository uses GitHub Actions to automate deployments into Azure Kubernetes Service.
-
-Deployment workflows support:
-
-- Building and deploying microservices
-- Updating Kubernetes deployments with new container images
-- Rolling out new versions into AKS
-- Verifying successful deployments
-
-Currently supported services:
-
-- Orders microservice
-- Products microservice
-- Users microservice
-
-This is triggered either:
-
-- Manually by specifying the service name and the container image tag to deploy via the GitHub Actions workflow dispatch interface.
-- Automatically, as part of the CI/CD pipeline. As when a microservice repo is updated, its CI pipeline pushes the image to the Azure Container Registry and then triggers the deployment workflow in this repository to perform the CD by updating the Kubernetes deployment with the new image.
-
-## Diagram of the CI/CD flow
-
-```
-                         ┌──────────────────────────┐
-                         │  Developer pushes code   │
-                         │  to microservice repo    │
-                         └────────────┬─────────────┘
-                                      │
-                                      ▼
-                         ┌──────────────────────────┐
-                         │   GitHub Actions CI      │
-                         │                          │
-                         │  - Build Docker image    │
-                         │  - Run tests             │
-                         │  - Tag image with SHA    │
-                         └────────────┬─────────────┘
-                                      │
-                                      ▼
-              ┌──────────────────────────────────────────┐
-              │ Azure Container Registry (ACR)           │
-              │                                          │
-              │ commercefabricregistry.azurecr.io        │
-              │                                          │
-              │ orders-microservice:<version>            │
-              │ products-microservice:<version>          │
-              │ users-microservice:<version>             │
-              └──────────────────┬───────────────────────┘
-                                 │
-                                 │ repository_dispatch
-                                 │
-                                 │ Payload:
-                                 │ {
-                                 │   service: "orders",
-                                 │   image_tag: "8ce72d29..."
-                                 │ }
-                                 ▼
-              ┌──────────────────────────────────────────┐
-              │ GitHub Actions Deployment Workflow       │
-              │                                          │
-              │ Deploy to AKS                            │
-              │                                          │
-              │ 1. Authenticate to Azure (OIDC)          │
-              │ 2. Connect to AKS                        │
-              │ 3. Update Kubernetes deployment image    │
-              └──────────────────┬───────────────────────┘
-                                 │
-                                 ▼
-              ┌──────────────────────────────────────────┐
-              │ Azure Kubernetes Service (AKS)           │
-              │                                          │
-              │ Namespace: commercefabric-namespace      │
-              │                                          │
-              │ orders-microservice-deployment           │
-              │        │                                 │
-              │        ▼                                 │
-              │ Pull image:                              │
-              │ commercefabricregistry.azurecr.io/       │
-              │ orders-microservice:<version>            │
-              │                                          │
-              │ products-microservice-deployment         │
-              │ users-microservice-deployment            │
-              └──────────────────────────────────────────┘
-```
-
-> Note: The database seeding only creates the expected table structure - if you want dummy data to be inserted into the database for testing, you can run `kubectl apply -f aks_seedDummyData/` to seed the database with sample data.
----
-
-## Azure Authentication
-
-GitHub Actions authenticates with Azure using **Workload Identity Federation (OIDC)**.
-
-This provides secure authentication without requiring long-lived Azure credentials or service principal secrets stored in GitHub.
-
-The deployment flow is:
-
-1. GitHub Actions requests an OIDC token from GitHub.
-2. Azure validates the federated identity credential.
-3. The workflow authenticates against Azure.
-4. The workflow connects to AKS.
-5. Kubernetes resources are deployed or updated.
-
----
-
-# Azure Kubernetes Service (AKS)
-
-The CommerceFabric platform runs on Azure Kubernetes Service.
-
-Each microservice is deployed as a Kubernetes Deployment within:
-
-```
-commercefabric-namespace
-```
-
-The main application services are:
-
-| Service | Kubernetes Deployment |
+| Resource | Purpose |
 |---|---|
-| Orders | `orders-microservice-deployment` |
-| Products | `products-microservice-deployment` |
-| Users | `users-microservice-deployment` |
+| **Azure Kubernetes Service (AKS)** | Runs the CommerceFabric microservices, API gateway, databases, caches and messaging workloads. |
+| **Azure Container Registry (ACR)** | Stores container images built by the individual service repositories. AKS has `AcrPull` access. |
+| **Azure Service Bus** | Provides asynchronous communication between microservices using topics and subscriptions. |
+| **Azure API Management (APIM)** | Provides the public API boundary in front of the API Gateway, including JWT validation and CORS policies. |
+| **Microsoft Entra External ID** | Provides customer authentication using separate frontend/backend application registrations and user flows. |
+
+The main application workloads run inside the `commercefabric-namespace` Kubernetes namespace.
 
 ---
 
-# Deployment Verification
+# Infrastructure as Code
 
-After deployment, you can verify the running workloads using:
+Azure infrastructure is defined using **Bicep**, Microsoft's Infrastructure as Code language for Azure Resource Manager.
+
+At a high level:
+
+```text
+main.bicep
+    │
+    ├── modules/aks.bicep
+    ├── modules/acr.bicep
+    ├── modules/servicebus.bicep
+    └── modules/apim.bicep
+             │
+             ▼
+       Azure Resources
+
+rbac.bicep
+    │
+    ├── AKS  → ACR AcrPull
+    ├── GitHub → ACR AcrPush
+    └── GitHub → AKS Cluster User
+```
+
+`main.bicep` coordinates the individual modules and passes configuration such as resource names and locations to them.
+
+Environment-specific values are supplied using `.bicepparam` files. This allows the same infrastructure definition to create production or disposable test environments without modifying the Bicep itself.
+
+RBAC is deployed separately after the resources exist because some permissions depend on identities generated during AKS creation.
+
+### Infrastructure Structure
+
+```text
+infra/
+│
+├── main.bicep
+├── main.bicepparam
+├── main.test.bicepparam
+├── rbac.bicep
+│
+├── configure-apim.ps1
+│
+├── apim/
+│   ├── api-policy.xml
+│   ├── orders.swagger.json
+│   ├── products.swagger.json
+│   └── users.swagger.json
+│
+└── modules/
+    ├── acr.bicep
+    ├── aks.bicep
+    ├── apim.bicep
+    ├── apim-policies.bicep
+    ├── servicebus.bicep
+    │
+    └── identity/
+        ├── main.identity.bicep
+        ├── configure-identity.ps1
+        └── modules/
+            ├── backend-app.bicep
+            └── frontend-app.bicep
+```
+
+The identity Bicep is intentionally separate from the main infrastructure deployment. It manages CommerceFabric application registrations inside the External ID tenant and is primarily intended for identity/disaster-recovery scenarios.
+
+---
+
+# CI/CD
+
+CommerceFabric uses GitHub Actions to automate both **Azure infrastructure provisioning** and **application deployment**.
+
+The `infra-platform` repository acts as the central deployment orchestrator. It owns the Azure Bicep infrastructure, Kubernetes manifests, RBAC configuration, and APIM configuration required to run the platform.
+
+GitHub authenticates to Azure using **Workload Identity Federation (OIDC)** rather than storing a long-lived Azure service-principal password.
+
+## Infrastructure Deployment
+
+Before deploying application workloads, the `infra-platform` workflow ensures the required Azure infrastructure exists and matches the Bicep definitions.
+
+The deployment workflow will:
+
+1. Authenticate to Azure using GitHub OIDC.
+2. Create or verify the Azure Resource Group.
+3. Deploy `main.bicep` to create/update AKS, ACR, Service Bus and APIM.
+4. Deploy `rbac.bicep` to configure access between GitHub, AKS and ACR.
+5. Capture environment-specific outputs generated by the infrastructure deployment.
+6. Deploy the Kubernetes manifests into AKS.
+7. Wait for the API Gateway endpoint to become available.
+8. Configure APIM by importing the OpenAPI definitions and applying JWT/CORS policies.
+
+Because Bicep deployments are declarative, the same workflow can be used both to **recreate a deleted environment** and to **update an existing environment**.
+
+```text
+GitHub Actions
+      │
+      ▼
+Azure OIDC Authentication
+      │
+      ▼
+Create / Verify Resource Group
+      │
+      ▼
+Deploy main.bicep
+      │
+      ├── AKS
+      ├── ACR
+      ├── Service Bus
+      └── APIM
+      │
+      ▼
+Deploy rbac.bicep
+      │
+      ├── AKS → ACR AcrPull
+      ├── GitHub → ACR AcrPush
+      └── GitHub → AKS Cluster User
+      │
+      ▼
+Deploy Kubernetes manifests
+      │
+      ▼
+Wait for API Gateway
+      │
+      ▼
+Configure APIM
+      │
+      ├── Import OpenAPI definitions
+      └── Apply JWT/CORS policies
+      │
+      ▼
+CommerceFabric Environment
+```
+
+> GitHub authenticates to Azure using **Workload Identity Federation (OIDC)** rather than storing a long-lived Azure service-principal password.
+
+## Microservice Releases
+
+Individual microservice repositories remain responsible for their own CI pipelines.
+
+When application code changes, the service repository:
+
+1. Builds and tests the application.
+2. Builds a versioned Docker image.
+3. Authenticates to Azure using GitHub OIDC.
+4. Pushes the image to Azure Container Registry.
+5. Triggers the `infra-platform` deployment workflow.
+
+`infra-platform` then ensures the Azure infrastructure is available before updating the corresponding Kubernetes deployment to use the new image.
+
+```text
+Developer Push
+      │
+      ▼
+Microservice Repository
+      │
+      ├── Test
+      ├── Build
+      └── Build Docker Image
+              │
+              ▼
+             ACR
+              │
+              ▼
+     Trigger infra-platform
+              │
+              ▼
+     Ensure Azure Infrastructure
+              │
+              ▼
+     Deploy New Image to AKS
+```
+
+This separation keeps the microservice repositories focused on **building and publishing applications**, while `infra-platform` owns **provisioning and deploying the environment in which they run**.
+
+> GitHub authenticates to Azure using **Workload Identity Federation (OIDC)** rather than storing a long-lived Azure service-principal password.
+
+---
+
+# Full Environment Deployment
+
+The intended full deployment flow is:
+
+```text
+GitHub Actions
+      │
+      ▼
+Authenticate to Azure using OIDC
+      │
+      ▼
+Create/verify Resource Group
+      │
+      ▼
+Deploy main.bicep
+      │
+      ├── AKS
+      ├── ACR
+      ├── Service Bus
+      └── APIM
+      │
+      ▼
+Deploy rbac.bicep
+      │
+      ├── AKS → ACR
+      ├── GitHub → ACR
+      └── GitHub → AKS
+      │
+      ▼
+Deploy Kubernetes manifests
+      │
+      ▼
+Wait for API Gateway endpoint
+      │
+      ▼
+Configure APIM
+      │
+      ├── Import OpenAPI definitions
+      └── Apply JWT/CORS policies
+      │
+      ▼
+CommerceFabric available
+```
+
+This makes the Azure environment disposable: the resource group can be removed when the portfolio project is not required and recreated from source control when needed.
+
+The Microsoft Entra External ID tenant is managed separately and does not need to be destroyed when the main Azure resource group is removed.
+
+---
+
+# Kubernetes
+
+AKS hosts the CommerceFabric application and supporting infrastructure, including:
+
+- API Gateway
+- Users microservice
+- Products microservice
+- Orders microservice
+- PostgreSQL
+- MySQL
+- MongoDB
+- Redis
+- RabbitMQ
+
+Deployments can be inspected with:
 
 ```powershell
-kubectl get deployments -n commercefabric-namespace; # view deployments
+kubectl get deployments -n commercefabric-namespace
+kubectl get pods -n commercefabric-namespace
+kubectl rollout status deployment/<deployment-name> -n commercefabric-namespace
+```
 
-kubectl get pods -n commercefabric-namespace; # view pods
+Test data can optionally be seeded using:
 
-kubectl describe pod <pod-name> -n commercefabric-namespace # check container image running on a pod is the expected one
-
-kubectl rollout status deployment/<deployment-name> -n commercefabric-namespace # check rollout status of a deployment
+```powershell
+kubectl apply -f aks_seedDummyData/
 ```
 
 ---
 
-# Manual Deployment
+# Secrets and Security
 
-If you need to manually deploy or recreate the platform infrastructure, follow the deployment guide:
+Secrets are **not stored in Bicep or committed to source control**.
 
-[Manual deployment and setup guide](./docs/ManualDeploymentGuide.md)
+GitHub Actions secrets provide deployment configuration, while Kubernetes Secrets provide sensitive runtime configuration to workloads.
 
----
+Azure authentication from GitHub uses OIDC federation, removing the need for a long-lived Azure deployment password.
 
-# Security Notes
-
-> ⚠️ **Kubernetes Secrets**
->
-> Kubernetes manifests currently contain secrets in plaintext for development and demonstration purposes.
->
-> In a production environment, secrets should be stored securely using a dedicated secrets management solution.
+Generated environment-specific values such as Service Bus connection strings are intended to be propagated into GitHub/Kubernetes configuration as part of the deployment automation.
 
 ---
 
-> ✔ **GitHub Actions Secrets**
->
-> Deployment workflows use GitHub Actions Secrets for sensitive configuration values such as Azure authentication details.
->
-> These secrets are protected by GitHub and are not exposed directly in workflow files.
+# Current Status
 
----
+The Azure infrastructure can currently be recreated from Bicep, including:
 
-> ℹ️ **Deploy-All workflow**
->
-> A separate **deploy-all** workflow is available for initial platform deployments or situations where all Kubernetes resources need to be recreated.
->
-> Unlike the normal microservice deployment workflow, this workflow does not receive a specific image tag from a microservice repository. Instead, it applies all Kubernetes manifests from the `aks/` directory using `kubectl apply`.
->
-> The workflow deploys all configured services using their manifest-defined container image versions. If the manifests reference the `latest` image tag, Kubernetes will use the latest available image from Azure Container Registry.
->
-> This workflow is intended for manual use from the GitHub Actions interface and is not triggered automatically by individual microservice repositories.
+- AKS
+- ACR
+- Service Bus topics and subscriptions
+- APIM
+- Azure RBAC relationships
+
+The next stage is integrating the Bicep deployment into the existing GitHub Actions release workflow and automating propagation of generated environment configuration.
