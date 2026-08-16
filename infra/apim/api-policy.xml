@@ -1,0 +1,63 @@
+<policies>
+  <inbound>
+    <base />
+
+    <cors allow-credentials="true">
+      <allowed-origins>
+        <origin>__CORS_ORIGIN__</origin>
+      </allowed-origins>
+
+      <allowed-methods>
+        <method>GET</method>
+        <method>POST</method>
+        <method>PUT</method>
+        <method>DELETE</method>
+        <method>OPTIONS</method>
+      </allowed-methods>
+
+      <allowed-headers>
+        <header>Content-Type</header>
+        <header>Authorization</header>
+        <header>Accept</header>
+        <header>x-requested-with</header>
+      </allowed-headers>
+
+      <expose-headers>
+        <header>Content-Length</header>
+        <header>Authorization</header>
+        <header>Content-Type</header>
+      </expose-headers>
+    </cors>
+
+    <validate-jwt
+      header-name="Authorization"
+      failed-validation-httpcode="401"
+      failed-validation-error-message="Unauthorized"
+      require-expiration-time="true"
+      require-scheme="Bearer"
+      require-signed-tokens="true">
+
+      <openid-config url="__OPENID_CONFIG_URL__" />
+
+      <audiences>
+        <audience>__API_AUDIENCE__</audience>
+      </audiences>
+
+      <issuers>
+        <issuer>__TOKEN_ISSUER__</issuer>
+      </issuers>
+    </validate-jwt>
+  </inbound>
+
+  <backend>
+    <base />
+  </backend>
+
+  <outbound>
+    <base />
+  </outbound>
+
+  <on-error>
+    <base />
+  </on-error>
+</policies>
