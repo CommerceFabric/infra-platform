@@ -2,6 +2,21 @@ name: Deploy All Services to AKS
 
 on:
   workflow_dispatch:
+    inputs:
+      environment:
+        description: "Azure environment to deploy"
+        required: true
+        type: choice
+        default: production
+        options:
+          - production
+          - test
+
+      bootstrap:
+        description: "Bootstrap/recreate the Azure environment"
+        required: true
+        type: boolean
+        default: false
 
 jobs:
   deploy:
@@ -12,13 +27,35 @@ jobs:
       contents: read
 
     env:
+      # ============================================================
+      # CommerceFabric environment
+      # ============================================================
+
       NAMESPACE: commercefabric-namespace
+
+      AZURE_LOCATION: uksouth
+
+      APIM_LOCATION: ukwest
+
+      # Object ID of the GitHub Actions service principal.
+      # This is NOT the AZURE_CLIENT_ID.
+      GITHUB_DEPLOYMENT_PRINCIPAL_ID: 69c7550b-04c2-4334-af5c-5bd8de684f8f
+
       ROLLOUT_TIMEOUT: 5m
       JOB_TIMEOUT: 5m
 
     steps:
+      # ============================================================
+      # Repository
+      # ============================================================
+
       - name: Checkout
         uses: actions/checkout@v4
+
+
+      # ============================================================
+      # Azure Authentication
+      # ============================================================
 
       - name: Azure Login
         uses: azure/login@v2
@@ -27,53 +64,320 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Connect to AKS
-        run: |
-          az aks get-credentials \
-            --resource-group "${{ secrets.AZURE_RESOURCE_GROUP }}" \
-            --name "${{ secrets.AZURE_AKS_CLUSTER }}" \
-            --overwrite-existing
+      # ============================================================
+      # Resolve target environment
+      # ============================================================
 
-      - name: Configure Azure Service Bus secret
+      - name: Resolve target environment
+        shell: bash
         run: |
-          if [ -z "${{ secrets.AZURE_SERVICEBUS_CONNECTION }}" ]; then
-            echo "AZURE_SERVICEBUS_CONNECTION is not configured"
-            exit 1
+          set -euo pipefail
+
+          ENVIRONMENT="${{ github.event.inputs.environment }}"
+
+          if [ "$ENVIRONMENT" = "test" ]; then
+            echo "AZURE_RESOURCE_GROUP=CommerceFabric-IaC-Test" >> "$GITHUB_ENV"
+            echo "AZURE_AKS_CLUSTER=commercefabric-aks-test" >> "$GITHUB_ENV"
+            echo "ACR_NAME=commercefabricregistrytest" >> "$GITHUB_ENV"
+            echo "SERVICEBUS_NAMESPACE=commercefabric-servicebus-test" >> "$GITHUB_ENV"
+            echo "APIM_NAME=commercefabricapimtest" >> "$GITHUB_ENV"
+            echo "BICEP_PARAMETERS=./infra/main.test.bicepparam" >> "$GITHUB_ENV"
+          else
+            echo "AZURE_RESOURCE_GROUP=CommerceFabric-ResourceGroup" >> "$GITHUB_ENV"
+            echo "AZURE_AKS_CLUSTER=commercefabric-aks-cluster" >> "$GITHUB_ENV"
+            echo "ACR_NAME=commercefabricregistry" >> "$GITHUB_ENV"
+            echo "SERVICEBUS_NAMESPACE=commercefabric-servicebus-namespace" >> "$GITHUB_ENV"
+            echo "APIM_NAME=commercefabricapimanagement" >> "$GITHUB_ENV"
+            echo "BICEP_PARAMETERS=./infra/main.bicepparam" >> "$GITHUB_ENV"
           fi
 
-          kubectl create secret generic azurebus-microservice-secrets \
-            --namespace "$NAMESPACE" \
-            --from-literal=AZURE_SERVICEBUS_CONNECTION="${{ secrets.AZURE_SERVICEBUS_CONNECTION }}" \
+          echo "Selected environment: $ENVIRONMENT"
+      
+      # ============================================================
+      # Azure Resource Group
+      # ============================================================
+
+      - name: Ensure Azure Resource Group exists
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "Ensuring resource group '$AZURE_RESOURCE_GROUP' exists..."
+
+          az group create \
+            --name "$AZURE_RESOURCE_GROUP" \
+            --location "$AZURE_LOCATION" \
+            --output none
+
+
+      # ============================================================
+      # APIM soft-delete recovery
+      #
+      # If the RG was previously deleted, APIM may remain soft
+      # deleted and reserve its global name.
+      # ============================================================
+
+      - name: Purge soft-deleted APIM instance if required
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "Checking APIM state for '$APIM_NAME'..."
+
+          if az apim show \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --name "$APIM_NAME" \
+            --output none 2>/dev/null; then
+
+            echo "Active APIM instance already exists."
+            exit 0
+          fi
+
+          if az apim deletedservice show \
+            --service-name "$APIM_NAME" \
+            --location "$APIM_LOCATION" \
+            --output none 2>/dev/null; then
+
+            echo "Soft-deleted APIM instance found."
+            echo "Purging '$APIM_NAME'..."
+
+            az apim deletedservice purge \
+              --service-name "$APIM_NAME" \
+              --location "$APIM_LOCATION" \
+              --output none
+
+            echo "APIM instance purged."
+          else
+            echo "No soft-deleted APIM instance found."
+          fi
+
+
+      # ============================================================
+      # Azure Infrastructure
+      #
+      # Creates / updates:
+      #   - AKS
+      #   - ACR
+      #   - Service Bus
+      #   - APIM
+      # ============================================================
+
+      - name: Deploy Azure infrastructure
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "Deploying CommerceFabric Azure infrastructure..."
+
+          az deployment group create \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --name "commercefabric-infrastructure" \
+            --parameters "$BICEP_PARAMETERS" \
+            --output none
+
+          echo "Azure infrastructure deployment completed."
+
+
+      # ============================================================
+      # Azure RBAC
+      #
+      # Runs after main.bicep because the AKS kubelet identity is
+      # generated when AKS is created.
+      #
+      # Creates:
+      #   - AKS kubelet -> ACR AcrPull
+      #   - GitHub      -> ACR AcrPush
+      #   - GitHub      -> AKS Cluster User
+      # ============================================================
+
+      - name: Configure Azure RBAC
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "Configuring CommerceFabric Azure RBAC..."
+
+          az deployment group create \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --name "commercefabric-rbac" \
+            --template-file "./infra/rbac.bicep" \
+            --parameters \
+              aksClusterName="$AZURE_AKS_CLUSTER" \
+              acrName="$ACR_NAME" \
+              githubDeploymentPrincipalId="$GITHUB_DEPLOYMENT_PRINCIPAL_ID" \
+            --output none
+
+          echo "Azure RBAC configuration completed."
+
+
+      # ============================================================
+      # Connect kubectl to AKS
+      # ============================================================
+
+      - name: Connect to AKS
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          az aks get-credentials \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --name "$AZURE_AKS_CLUSTER" \
+            --overwrite-existing
+
+          kubectl config set-context \
+            --current \
+            --namespace="$NAMESPACE"
+
+
+      # ============================================================
+      # Kubernetes Namespace
+      # ============================================================
+
+      - name: Ensure Kubernetes namespace exists
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          kubectl create namespace "$NAMESPACE" \
             --dry-run=client \
             -o yaml \
             | kubectl apply -f -
 
-      - name: Configure User Service secret
+
+      # ============================================================
+      # Azure Service Bus connection
+      #
+      # Retrieved dynamically instead of being maintained as a
+      # permanent GitHub secret.
+      # ============================================================
+
+      - name: Get Azure Service Bus connection string
+        shell: bash
         run: |
-          if [ -z "${{ secrets.AZURE_ENTRA_CLIENT_SECRET }}" ]; then
-            echo "AZURE_ENTRA_CLIENT_SECRET is not configured"
+          set -euo pipefail
+
+          CONNECTION_STRING=$(az servicebus namespace authorization-rule keys list \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --namespace-name "$SERVICEBUS_NAMESPACE" \
+            --name "RootManageSharedAccessKey" \
+            --query primaryConnectionString \
+            --output tsv)
+
+          if [ -z "$CONNECTION_STRING" ]; then
+            echo "::error::Failed to retrieve Service Bus connection string."
+            exit 1
+          fi
+
+          echo "::add-mask::$CONNECTION_STRING"
+          echo "AZURE_SERVICEBUS_CONNECTION=$CONNECTION_STRING" >> "$GITHUB_ENV"
+
+
+      # ============================================================
+      # Kubernetes Secrets
+      # ============================================================
+
+      - name: Configure Azure Service Bus secret
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          kubectl create secret generic azurebus-microservice-secrets \
+            --namespace "$NAMESPACE" \
+            --from-literal=AZURE_SERVICEBUS_CONNECTION="$AZURE_SERVICEBUS_CONNECTION" \
+            --dry-run=client \
+            -o yaml \
+            | kubectl apply -f -
+
+
+      - name: Configure User Service secret
+        shell: bash
+        env:
+          ENTRA_CLIENT_SECRET: ${{ secrets.AZURE_ENTRA_CLIENT_SECRET }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$ENTRA_CLIENT_SECRET" ]; then
+            echo "::error::AZURE_ENTRA_CLIENT_SECRET is not configured."
             exit 1
           fi
 
           kubectl create secret generic users-microservice-secrets \
             --namespace "$NAMESPACE" \
-            --from-literal=COMMERCEFABRIC_AZURE_ENTRA_CLIENT_SECRET="${{ secrets.AZURE_ENTRA_CLIENT_SECRET }}" \
+            --from-literal=COMMERCEFABRIC_AZURE_ENTRA_CLIENT_SECRET="$ENTRA_CLIENT_SECRET" \
             --dry-run=client \
             -o yaml \
             | kubectl apply -f -
 
+
+      # ============================================================
+      # Kubernetes Deployment
+      #
+      # In bootstrap mode the application images may not yet exist
+      # in the newly-created ACR. The manifests are still applied so
+      # all Deployments/Services exist ready for the normal
+      # microservice pipelines to publish and deploy their images.
+      # ============================================================
+
       - name: Apply Kubernetes manifests
+        shell: bash
         run: |
           set -euo pipefail
 
           echo "Applying Kubernetes manifests..."
           kubectl apply -f aks/
 
-      # ------------------------------------------------------------
-      # Check every Deployment in the namespace
-      # ------------------------------------------------------------
+
+      # ============================================================
+      # Bootstrap mode
+      #
+      # Do not require every Deployment to become healthy yet.
+      # Newly-created ACR may still be empty.
+      # ============================================================
+
+      - name: Show bootstrap workload state
+        if: ${{ inputs.bootstrap }}
+        shell: bash
+        run: |
+          echo "=================================================="
+          echo "BOOTSTRAP MODE"
+          echo "=================================================="
+          echo ""
+          echo "Azure infrastructure and Kubernetes resources have been created."
+          echo ""
+          echo "Application images may not yet exist in ACR."
+          echo "ImagePullBackOff / ErrImagePull is therefore expected at this stage."
+          echo ""
+          echo "Run the relevant microservice CI pipelines next so they:"
+          echo "  1. build their images"
+          echo "  2. push them into ACR"
+          echo "  3. trigger deploy-microservice.yml"
+          echo ""
+
+          echo "### 🏗️ Bootstrap mode" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Azure infrastructure and Kubernetes resources were created successfully." >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Application images may not yet exist in ACR. Run the microservice pipelines to populate ACR and complete their rollouts." >> "$GITHUB_STEP_SUMMARY"
+
+          kubectl get deployments \
+            -n "$NAMESPACE" \
+            -o wide || true
+
+          kubectl get pods \
+            -n "$NAMESPACE" \
+            -o wide || true
+
+
+      # ============================================================
+      # Normal deployment verification
+      #
+      # Skip this in bootstrap mode because application images may
+      # legitimately not exist yet.
+      # ============================================================
+
       - name: Verify all deployments
         id: deployments
+        if: ${{ !inputs.bootstrap }}
         shell: bash
         run: |
           set +e
@@ -126,13 +430,18 @@ jobs:
             exit 1
           fi
 
-      # ------------------------------------------------------------
-      # Check every Job in the namespace
-      # e.g. mongodb-seed-job, mysql-seed-job, postgres-seed-job
-      # ------------------------------------------------------------
+
+      # ============================================================
+      # Kubernetes Jobs
+      #
+      # Also skip strict Job verification during bootstrap because
+      # some jobs may depend on application/infrastructure images
+      # which have not yet been populated into ACR.
+      # ============================================================
+
       - name: Verify all jobs
         id: jobs
-        if: always()
+        if: ${{ !inputs.bootstrap }}
         shell: bash
         run: |
           set +e
@@ -147,8 +456,10 @@ jobs:
 
           if [ -z "$JOBS" ]; then
             echo "No jobs found."
+
             echo "### ℹ️ Kubernetes Jobs" >> "$GITHUB_STEP_SUMMARY"
             echo "No jobs found in namespace." >> "$GITHUB_STEP_SUMMARY"
+
             exit 0
           fi
 
@@ -198,61 +509,124 @@ jobs:
             exit 1
           fi
 
-      # ------------------------------------------------------------
-      # Show everything after deployment
-      # ------------------------------------------------------------
+
+      # ============================================================
+      # API Management
+      #
+      # Only configure APIM during a normal full deployment.
+      #
+      # In bootstrap mode the API Gateway image may not exist yet,
+      # so there may be no functioning LoadBalancer backend to give
+      # to APIM.
+      # ============================================================
+
+      - name: Configure API Management
+        if: ${{ !inputs.bootstrap }}
+        shell: pwsh
+        run: |
+          ./infra/configure-apim.ps1 `
+            -ResourceGroup "$env:AZURE_RESOURCE_GROUP" `
+            -ApimName "$env:APIM_NAME" `
+            -GatewayServiceName "apigateway"
+
+
+      # ============================================================
+      # Deployment summary
+      # ============================================================
+
+      - name: Add infrastructure summary
+        if: success()
+        shell: bash
+        run: |
+          echo "## ✅ CommerceFabric Azure environment" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          echo "| Resource | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Resource Group | \`$AZURE_RESOURCE_GROUP\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| AKS | \`$AZURE_AKS_CLUSTER\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| ACR | \`$ACR_NAME.azurecr.io\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Service Bus | \`$SERVICEBUS_NAMESPACE\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| APIM | \`https://$APIM_NAME.azure-api.net\` |" >> "$GITHUB_STEP_SUMMARY"
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "${{ inputs.bootstrap }}" = "true" ]; then
+            echo "### Next step" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "Run each CommerceFabric microservice pipeline so its image is pushed into the newly-created ACR." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "All Kubernetes workloads and APIM configuration were verified." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+
+      # ============================================================
+      # Show final status
+      # ============================================================
+
       - name: Show deployment status
         if: always()
+        shell: bash
         run: |
           echo "=================================================="
           echo "DEPLOYMENTS"
           echo "=================================================="
+
           kubectl get deployments \
             -n "$NAMESPACE" \
-            -o wide
+            -o wide || true
 
           echo ""
           echo "=================================================="
           echo "PODS"
           echo "=================================================="
+
           kubectl get pods \
             -n "$NAMESPACE" \
-            -o wide
+            -o wide || true
 
           echo ""
           echo "=================================================="
           echo "SERVICES"
           echo "=================================================="
+
           kubectl get services \
-            -n "$NAMESPACE"
+            -n "$NAMESPACE" || true
 
           echo ""
           echo "=================================================="
           echo "JOBS"
           echo "=================================================="
+
           kubectl get jobs \
-            -n "$NAMESPACE"
+            -n "$NAMESPACE" || true
+
 
       - name: Show deployed images
         if: always()
+        shell: bash
         run: |
           kubectl get pods \
             -n "$NAMESPACE" \
-            -o jsonpath="{range .items[*]}{.metadata.name}{': '}{range .status.containerStatuses[*]}{.image}{' '}{end}{'\n'}{end}"
+            -o jsonpath="{range .items[*]}{.metadata.name}{': '}{range .status.containerStatuses[*]}{.image}{' '}{end}{'\n'}{end}" \
+            || true
 
-      # ------------------------------------------------------------
-      # Extra diagnostics if something failed
-      # ------------------------------------------------------------
+
+      # ============================================================
+      # Failure diagnostics
+      # ============================================================
+
       - name: Deployment failure diagnostics
         if: failure()
         shell: bash
         run: |
-          echo "::error::One or more Kubernetes resources failed to deploy correctly"
+          echo "::error::CommerceFabric deployment workflow failed."
 
           echo ""
           echo "=================================================="
           echo "PODS"
           echo "=================================================="
+
           kubectl get pods \
             -n "$NAMESPACE" \
             -o wide || true
@@ -261,6 +635,7 @@ jobs:
           echo "=================================================="
           echo "RECENT EVENTS"
           echo "=================================================="
+
           kubectl get events \
             -n "$NAMESPACE" \
             --sort-by='.lastTimestamp' || true
@@ -272,11 +647,16 @@ jobs:
 
           kubectl get pods \
             -n "$NAMESPACE" \
-            -o name |
+            -o name 2>/dev/null |
           while read -r pod; do
+            [ -z "$pod" ] && continue
+
             echo ""
             echo "---------------- $pod ----------------"
-            kubectl describe "$pod" -n "$NAMESPACE" || true
+
+            kubectl describe \
+              "$pod" \
+              -n "$NAMESPACE" || true
           done
 
           echo ""
@@ -287,7 +667,7 @@ jobs:
           kubectl get pods \
             -n "$NAMESPACE" \
             --field-selector=status.phase!=Running,status.phase!=Succeeded \
-            -o name |
+            -o name 2>/dev/null |
           while read -r pod; do
             [ -z "$pod" ] && continue
 
@@ -301,7 +681,6 @@ jobs:
               --tail=200 || true
           done
 
-          echo "## ❌ Deployment failed" >> "$GITHUB_STEP_SUMMARY"
+          echo "## ❌ CommerceFabric deployment failed" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "One or more Kubernetes Deployments or Jobs failed." >> "$GITHUB_STEP_SUMMARY"
-          echo "Check the failed workflow steps and diagnostics above." >> "$GITHUB_STEP_SUMMARY"
+          echo "Check the failed workflow step and diagnostics above." >> "$GITHUB_STEP_SUMMARY"
