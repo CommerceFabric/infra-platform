@@ -10,26 +10,26 @@ spec:
     spec:
       restartPolicy: OnFailure
       containers:
-      - name: postgres-seeder
-        image: commercefabricregistry.azurecr.io/postgres:18.0
-        command:
-        - /bin/sh
-        - -c
-        - |
-          set -e
-          until pg_isready -h postgres -U postgres; do
-            echo "Waiting for postgres service..."
-            sleep 2
-          done
+        - name: postgres-seeder
+          image: postgres:18.0
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              until pg_isready -h postgres -U postgres; do
+                echo "Waiting for postgres service..."
+                sleep 2
+              done
 
-          echo "Running Postgres seed script..."
-          PGPASSWORD=admin psql -h postgres -U postgres -d commercefabricUsers -f /seed/db_users_seed.sql
-          echo "Postgres seed completed."
-        volumeMounts:
-        - name: postgres-seed-sql
-          mountPath: /seed
-          readOnly: true
+              echo "Running Postgres seed script..."
+              PGPASSWORD=admin psql -h postgres -U postgres -d commercefabricUsers -f /seed/db_users_seed.sql
+              echo "Postgres seed completed."
+          volumeMounts:
+            - name: postgres-seed-sql
+              mountPath: /seed
+              readOnly: true
       volumes:
-      - name: postgres-seed-sql
-        configMap:
-          name: postgres-seed-sql
+        - name: postgres-seed-sql
+          configMap:
+            name: postgres-seed-sql
