@@ -54,7 +54,7 @@ az apim api import `
     --display-name "ProductService.API" `
     --path "gateway/products" `
     --protocols https `
-    --specification-format apimJson `
+    --specification-format OpenApiJson `
     --specification-path $ProductsSwaggerPath `
     --service-url "$GatewayBaseUrl/gateway/products"
 
@@ -71,7 +71,7 @@ az apim api import `
     --display-name "UserService.API" `
     --path "gateway/users" `
     --protocols https `
-    --specification-format apimJson `
+    --specification-format OpenApiJson `
     --specification-path $UsersSwaggerPath `
     --service-url "$GatewayBaseUrl/gateway/users"
 
