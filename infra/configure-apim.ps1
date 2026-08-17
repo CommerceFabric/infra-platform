@@ -83,10 +83,12 @@ Write-Host "APIM API imports completed successfully."
 
 Write-Host "Applying APIM API policies..."
 
+$ApimPoliciesBicepPath = Join-Path $PSScriptRoot "modules/apim-policies.bicep"
+
 az deployment group create `
     --resource-group $ResourceGroup `
     --name "commercefabric-apim-policies" `
-    --template-file ".\infra\modules\apim-policies.bicep" `
+    --template-file $ApimPoliciesBicepPath `
     --parameters `
     apimName=$ApimName `
     corsOrigin="https://localhost:4200" `
