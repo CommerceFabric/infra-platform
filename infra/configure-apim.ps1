@@ -30,6 +30,7 @@ $UsersSwaggerPath = Join-Path $PSScriptRoot "apim/users.swagger.json"
 
 Write-Host "Importing Orders API..."
 
+# subscription required false as intended auth is JWT + CORS not azure subscriptions
 az apim api import `
     --resource-group $ResourceGroup `
     --service-name $ApimName `
@@ -39,6 +40,7 @@ az apim api import `
     --protocols https `
     --specification-format OpenApiJson `
     --specification-path $OrdersSwaggerPath `
+    --subscription-required false `
     --service-url "$GatewayBaseUrl/gateway/orders"
 
 if ($LASTEXITCODE -ne 0) {
@@ -56,6 +58,7 @@ az apim api import `
     --protocols https `
     --specification-format OpenApiJson `
     --specification-path $ProductsSwaggerPath `
+    --subscription-required false `
     --service-url "$GatewayBaseUrl/gateway/products"
 
 if ($LASTEXITCODE -ne 0) {
@@ -73,6 +76,7 @@ az apim api import `
     --protocols https `
     --specification-format OpenApiJson `
     --specification-path $UsersSwaggerPath `
+    --subscription-required false `
     --service-url "$GatewayBaseUrl/gateway/users"
 
 if ($LASTEXITCODE -ne 0) {
