@@ -33,7 +33,7 @@ az apim api import `
     --display-name "OrdersMicroservice.API" `
     --path "gateway/orders" `
     --protocols https `
-    --specification-format apimJson `
+    --specification-format OpenApiJson `
     --specification-path ".\infra\apim\orders.swagger.json" `
     --service-url "$GatewayBaseUrl/gateway/orders"
 
@@ -84,11 +84,11 @@ az deployment group create `
     --name "commercefabric-apim-policies" `
     --template-file ".\infra\modules\apim-policies.bicep" `
     --parameters `
-        apimName=$ApimName `
-        corsOrigin="https://localhost:4200" `
-        openIdConfigurationUrl="https://CommerceFabricWeb.ciamlogin.com/c0706265-6fae-4a73-b972-26ef20ccdd46/v2.0/.well-known/openid-configuration" `
-        apiAudience="6151da32-d5b8-484c-8d55-499e944367e7" `
-        tokenIssuer="https://c0706265-6fae-4a73-b972-26ef20ccdd46.ciamlogin.com/c0706265-6fae-4a73-b972-26ef20ccdd46/v2.0"
+    apimName=$ApimName `
+    corsOrigin="https://localhost:4200" `
+    openIdConfigurationUrl="https://CommerceFabricWeb.ciamlogin.com/c0706265-6fae-4a73-b972-26ef20ccdd46/v2.0/.well-known/openid-configuration" `
+    apiAudience="6151da32-d5b8-484c-8d55-499e944367e7" `
+    tokenIssuer="https://c0706265-6fae-4a73-b972-26ef20ccdd46.ciamlogin.com/c0706265-6fae-4a73-b972-26ef20ccdd46/v2.0"
 
 if ($LASTEXITCODE -ne 0) {
     throw "Failed to apply APIM API policies."
