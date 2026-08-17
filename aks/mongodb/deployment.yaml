@@ -16,7 +16,7 @@ spec:
         app: mongodb
     spec:
       containers:
-      - name: mongodb
-        image: commercefabricregistry.azurecr.io/mongo:8.3.7
-        ports:
-        - containerPort: 27017
+        - name: mongodb
+          image: mongo:8.3.7
+          ports:
+            - containerPort: 27017

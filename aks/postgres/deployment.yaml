@@ -16,14 +16,14 @@ spec:
         app: postgres
     spec:
       containers:
-      - name: postgres
-        image: commercefabricregistry.azurecr.io/postgres:18.0
-        env:
-        - name: POSTGRES_USER
-          value: postgres
-        - name: POSTGRES_PASSWORD
-          value: admin
-        - name: POSTGRES_DB
-          value: commercefabricUsers
-        ports:
-        - containerPort: 5432
+        - name: postgres
+          image: postgres:18.0
+          env:
+            - name: POSTGRES_USER
+              value: postgres
+            - name: POSTGRES_PASSWORD
+              value: admin
+            - name: POSTGRES_DB
+              value: commercefabricUsers
+          ports:
+            - containerPort: 5432

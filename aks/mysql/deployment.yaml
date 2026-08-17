@@ -16,12 +16,12 @@ spec:
         app: mysql
     spec:
       containers:
-      - name: mysql
-        image: commercefabricregistry.azurecr.io/mysql:9.7.1
-        env:
-        - name: MYSQL_ROOT_PASSWORD
-          value: admin
-        - name: MYSQL_DATABASE
-          value: productDB
-        ports:
-        - containerPort: 3306
+        - name: mysql
+          image: mysql:9.7.1
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              value: admin
+            - name: MYSQL_DATABASE
+              value: productDB
+          ports:
+            - containerPort: 3306
