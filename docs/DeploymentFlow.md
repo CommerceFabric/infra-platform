@@ -288,38 +288,6 @@ flowchart LR
 
 ---
 
-# Infrastructure Relationships
-
-Strictly speaking, this is an **infrastructure relationship diagram rather than a database ERD**, because the repository primarily describes infrastructure resources rather than relational entities.
-
-```mermaid
-erDiagram
-    RESOURCE_GROUP ||--|| AKS : contains
-    RESOURCE_GROUP ||--|| ACR : contains
-    RESOURCE_GROUP ||--|| SERVICE_BUS : contains
-    RESOURCE_GROUP ||--|| APIM : contains
-
-    AKS ||--o{ KUBERNETES_DEPLOYMENT : hosts
-    AKS ||--o{ KUBERNETES_SERVICE : hosts
-    AKS ||--o{ KUBERNETES_SECRET : stores
-
-    ACR ||--o{ APPLICATION_IMAGE : stores
-    KUBERNETES_DEPLOYMENT }o--|| APPLICATION_IMAGE : runs
-
-    SERVICE_BUS ||--o{ TOPIC : contains
-    TOPIC ||--o{ SUBSCRIPTION : contains
-
-    APIM ||--o{ API : exposes
-    API }o--|| API_GATEWAY : forwards_to
-
-    API_GATEWAY ||--o{ MICROSERVICE : routes_to
-
-    MICROSERVICE }o--o{ TOPIC : publishes_consumes
-
-    EXTERNAL_ID ||--o{ APP_REGISTRATION : contains
-    APP_REGISTRATION }o--o{ API : authenticates
-```
-
 # End-to-End Model
 
 The complete release model is therefore:
