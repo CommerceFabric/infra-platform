@@ -33,7 +33,6 @@ on:
       - deploy-user
       - deploy-apigateway
 
-
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -46,7 +45,6 @@ jobs:
       NAMESPACE: commercefabric-namespace
       ROLLOUT_TIMEOUT: 5m
 
-
     steps:
       # ============================================================
       # Repository
@@ -54,7 +52,6 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v4
-
 
       # ============================================================
       # Resolve deployment inputs
@@ -144,7 +141,6 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-
       # ============================================================
       # Verify environment
       #
@@ -193,7 +189,6 @@ jobs:
 
           echo "CommerceFabric environment exists."
 
-
       # ============================================================
       # Resolve current ACR login server
       #
@@ -220,7 +215,6 @@ jobs:
           echo "ACR_LOGIN_SERVER=$ACR_LOGIN_SERVER" >> "$GITHUB_ENV"
 
           echo "ACR: $ACR_LOGIN_SERVER"
-
 
       # ============================================================
       # Verify requested image exists in ACR
@@ -250,7 +244,6 @@ jobs:
 
           echo "Image exists: $ACR_LOGIN_SERVER/$IMAGE_NAME:$IMAGE_TAG"
 
-
       # ============================================================
       # Connect kubectl to AKS
       # ============================================================
@@ -269,7 +262,6 @@ jobs:
             --current \
             --namespace="$NAMESPACE"
 
-
       # ============================================================
       # Verify Kubernetes namespace
       # ============================================================
@@ -284,7 +276,6 @@ jobs:
             echo "::error::Run deploy-all.yml first."
             exit 1
           fi
-
 
       # ============================================================
       # Service Bus
@@ -328,8 +319,7 @@ jobs:
             --from-literal=AZURE_SERVICEBUS_CONNECTION="$AZURE_SERVICEBUS_CONNECTION" \
             --dry-run=client \
             -o yaml \
-            | kubectl apply -f -
-
+            | kubectl apply -R -f -
 
       # ============================================================
       # Users Service identity secret
@@ -356,8 +346,7 @@ jobs:
             --from-literal=COMMERCEFABRIC_AZURE_ENTRA_CLIENT_SECRET="$ENTRA_CLIENT_SECRET" \
             --dry-run=client \
             -o yaml \
-            | kubectl apply -f -
-
+            | kubectl apply -R -f -
 
       # ============================================================
       # Deploy requested service
@@ -405,7 +394,6 @@ jobs:
             "$CONTAINER=$IMAGE" \
             --namespace "$NAMESPACE"
 
-
       # ============================================================
       # Verify rollout
       # ============================================================
@@ -430,12 +418,11 @@ jobs:
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "Image tag: \`$IMAGE_TAG\`" >> "$GITHUB_STEP_SUMMARY"
 
-
       # ============================================================
       # APIM
       #
       # Reconcile the OpenAPI definitions and API policy after a
-      # successful application release that changed the apigateway. 
+      # successful application release that changed the apigateway.
       #
       # This also prepares us for later automatically updating the
       # swagger.json files from each service CI pipeline.
@@ -449,7 +436,6 @@ jobs:
             -ResourceGroup "$env:AZURE_RESOURCE_GROUP" `
             -ApimName "$env:APIM_NAME" `
             -GatewayServiceName "apigateway"
-
 
       # ============================================================
       # Deployment summary
@@ -481,7 +467,6 @@ jobs:
           kubectl get pods \
             --namespace "$NAMESPACE" \
             -o wide || true
-
 
       # ============================================================
       # Failure diagnostics

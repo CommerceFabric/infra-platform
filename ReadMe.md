@@ -276,7 +276,7 @@ kubectl rollout status deployment/<deployment-name> -n commercefabric-namespace
 Test data can optionally be seeded using:
 
 ```powershell
-kubectl apply -f aks_seedDummyData/
+kubectl apply -R -f aks_seedDummyData/
 ```
 
 ---

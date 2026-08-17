@@ -83,7 +83,7 @@ kubectl delete pod -n commercefabric-namespace -l app=mysql
 
 kubectl rollout status deployment/mysql-deployment -n commercefabric-namespace
 
-kubectl apply -f aks/mysql-seed-job.yaml
+kubectl apply -R -f aks/mysql-seed-job.yaml
 ````
 
 Verify:
@@ -104,7 +104,7 @@ kubectl delete pod -n commercefabric-namespace -l app=postgres
 
 kubectl rollout status deployment/postgres-deployment -n commercefabric-namespace
 
-kubectl apply -f aks/postgres-seed-job.yaml
+kubectl apply -R -f aks/postgres-seed-job.yaml
 ```
 
 Verify:
@@ -125,7 +125,7 @@ kubectl delete pod -n commercefabric-namespace -l app=mongodb
 
 kubectl rollout status deployment/mongodb-deployment -n commercefabric-namespace
 
-kubectl apply -f aks/mongodb-seed-job.yaml
+kubectl apply -R -f aks/mongodb-seed-job.yaml
 ```
 
 Verify:

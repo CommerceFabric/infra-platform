@@ -23,7 +23,7 @@ See:
 Deploy the Kubernetes manifests from the `aks` directory:
 
 ```bash
-kubectl apply -f ./aks
+kubectl apply -R -f ./aks
 ````
 
 ---
@@ -59,7 +59,7 @@ Services provide the internal Kubernetes DNS names used by microservices to comm
 After changing manifests or image configuration, redeploy:
 
 ```bash
-kubectl apply -f ./aks
+kubectl apply -R -f ./aks
 ```
 
 To restart running deployments:

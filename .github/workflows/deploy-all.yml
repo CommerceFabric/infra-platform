@@ -52,7 +52,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-
       # ============================================================
       # Azure Authentication
       # ============================================================
@@ -92,7 +91,7 @@ jobs:
           fi
 
           echo "Selected environment: $ENVIRONMENT"
-      
+
       # ============================================================
       # Azure Resource Group
       # ============================================================
@@ -108,7 +107,6 @@ jobs:
             --name "$AZURE_RESOURCE_GROUP" \
             --location "$AZURE_LOCATION" \
             --output none
-
 
       # ============================================================
       # APIM soft-delete recovery
@@ -151,7 +149,6 @@ jobs:
             echo "No soft-deleted APIM instance found."
           fi
 
-
       # ============================================================
       # Azure Infrastructure
       #
@@ -176,7 +173,6 @@ jobs:
             --output none
 
           echo "Azure infrastructure deployment completed."
-
 
       # ============================================================
       # Azure RBAC
@@ -209,7 +205,6 @@ jobs:
 
           echo "Azure RBAC configuration completed."
 
-
       # ============================================================
       # Connect kubectl to AKS
       # ============================================================
@@ -228,7 +223,6 @@ jobs:
             --current \
             --namespace="$NAMESPACE"
 
-
       # ============================================================
       # Kubernetes Namespace
       # ============================================================
@@ -241,8 +235,7 @@ jobs:
           kubectl create namespace "$NAMESPACE" \
             --dry-run=client \
             -o yaml \
-            | kubectl apply -f -
-
+            | kubectl apply -R -f -
 
       # ============================================================
       # Azure Service Bus connection
@@ -271,7 +264,6 @@ jobs:
           echo "::add-mask::$CONNECTION_STRING"
           echo "AZURE_SERVICEBUS_CONNECTION=$CONNECTION_STRING" >> "$GITHUB_ENV"
 
-
       # ============================================================
       # Kubernetes Secrets
       # ============================================================
@@ -286,8 +278,7 @@ jobs:
             --from-literal=AZURE_SERVICEBUS_CONNECTION="$AZURE_SERVICEBUS_CONNECTION" \
             --dry-run=client \
             -o yaml \
-            | kubectl apply -f -
-
+            | kubectl apply -R -f -
 
       - name: Configure User Service secret
         shell: bash
@@ -306,8 +297,7 @@ jobs:
             --from-literal=COMMERCEFABRIC_AZURE_ENTRA_CLIENT_SECRET="$ENTRA_CLIENT_SECRET" \
             --dry-run=client \
             -o yaml \
-            | kubectl apply -f -
-
+            | kubectl apply -R -f -
 
       # ============================================================
       # Kubernetes Deployment
@@ -324,8 +314,7 @@ jobs:
           set -euo pipefail
 
           echo "Applying Kubernetes manifests..."
-          kubectl apply -f aks/
-
+          kubectl apply -R -f aks/
 
       # ============================================================
       # Bootstrap mode
@@ -366,7 +355,6 @@ jobs:
           kubectl get pods \
             -n "$NAMESPACE" \
             -o wide || true
-
 
       # ============================================================
       # Normal deployment verification
@@ -429,7 +417,6 @@ jobs:
           if [ "$FAILED" -ne 0 ]; then
             exit 1
           fi
-
 
       # ============================================================
       # Kubernetes Jobs
@@ -509,7 +496,6 @@ jobs:
             exit 1
           fi
 
-
       # ============================================================
       # API Management
       #
@@ -528,7 +514,6 @@ jobs:
             -ResourceGroup "$env:AZURE_RESOURCE_GROUP" `
             -ApimName "$env:APIM_NAME" `
             -GatewayServiceName "apigateway"
-
 
       # ============================================================
       # Deployment summary
@@ -558,7 +543,6 @@ jobs:
           else
             echo "All Kubernetes workloads and APIM configuration were verified." >> "$GITHUB_STEP_SUMMARY"
           fi
-
 
       # ============================================================
       # Show final status
@@ -601,7 +585,6 @@ jobs:
           kubectl get jobs \
             -n "$NAMESPACE" || true
 
-
       - name: Show deployed images
         if: always()
         shell: bash
@@ -610,7 +593,6 @@ jobs:
             -n "$NAMESPACE" \
             -o jsonpath="{range .items[*]}{.metadata.name}{': '}{range .status.containerStatuses[*]}{.image}{' '}{end}{'\n'}{end}" \
             || true
-
 
       # ============================================================
       # Failure diagnostics

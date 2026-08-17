@@ -207,10 +207,10 @@ mysql-seed-job.yaml
 Deploy:
 
 ```bash
-kubectl apply -f aks/mysql-deployment.yaml
-kubectl apply -f aks/mysql.service.yaml
-kubectl apply -f aks/mysql-seed-configmap.yaml
-kubectl apply -f aks/mysql-seed-job.yaml
+kubectl apply -R -f aks/mysql-deployment.yaml
+kubectl apply -R -f aks/mysql.service.yaml
+kubectl apply -R -f aks/mysql-seed-configmap.yaml
+kubectl apply -R -f aks/mysql-seed-job.yaml
 ```
 
 Verify:
@@ -236,10 +236,10 @@ postgres-seed-job.yaml
 Deploy:
 
 ```bash
-kubectl apply -f aks/postgres-deployment.yaml
-kubectl apply -f aks/postgres.service.yaml
-kubectl apply -f aks/postgres-seed-configmap.yaml
-kubectl apply -f aks/postgres-seed-job.yaml
+kubectl apply -R -f aks/postgres-deployment.yaml
+kubectl apply -R -f aks/postgres.service.yaml
+kubectl apply -R -f aks/postgres-seed-configmap.yaml
+kubectl apply -R -f aks/postgres-seed-job.yaml
 ```
 
 Verify:
@@ -265,10 +265,10 @@ mongodb-seed-job.yaml
 Deploy:
 
 ```bash
-kubectl apply -f aks/mongodb-deployment.yaml
-kubectl apply -f aks/mongodb.service.yaml
-kubectl apply -f aks/mongodb-seed-configmap.yaml
-kubectl apply -f aks/mongodb-seed-job.yaml
+kubectl apply -R -f aks/mongodb-deployment.yaml
+kubectl apply -R -f aks/mongodb.service.yaml
+kubectl apply -R -f aks/mongodb-seed-configmap.yaml
+kubectl apply -R -f aks/mongodb-seed-job.yaml
 ```
 
 Verify:
