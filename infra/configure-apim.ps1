@@ -24,6 +24,10 @@ $GatewayBaseUrl = "http://${GatewayIp}:8080"
 
 Write-Host "Gateway backend URL: $GatewayBaseUrl"
 
+$OrdersSwaggerPath = Join-Path $PSScriptRoot "apim/orders.swagger.json"
+$ProductsSwaggerPath = Join-Path $PSScriptRoot "apim/products.swagger.json"
+$UsersSwaggerPath = Join-Path $PSScriptRoot "apim/users.swagger.json"
+
 Write-Host "Importing Orders API..."
 
 az apim api import `
@@ -34,7 +38,7 @@ az apim api import `
     --path "gateway/orders" `
     --protocols https `
     --specification-format OpenApiJson `
-    --specification-path ".\infra\apim\orders.swagger.json" `
+    --specification-path $OrdersSwaggerPath `
     --service-url "$GatewayBaseUrl/gateway/orders"
 
 if ($LASTEXITCODE -ne 0) {
@@ -51,7 +55,7 @@ az apim api import `
     --path "gateway/products" `
     --protocols https `
     --specification-format apimJson `
-    --specification-path ".\infra\apim\products.swagger.json" `
+    --specification-path $ProductsSwaggerPath `
     --service-url "$GatewayBaseUrl/gateway/products"
 
 if ($LASTEXITCODE -ne 0) {
@@ -68,7 +72,7 @@ az apim api import `
     --path "gateway/users" `
     --protocols https `
     --specification-format apimJson `
-    --specification-path ".\infra\apim\users.swagger.json" `
+    --specification-path $UsersSwaggerPath `
     --service-url "$GatewayBaseUrl/gateway/users"
 
 if ($LASTEXITCODE -ne 0) {
