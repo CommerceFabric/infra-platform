@@ -1,69 +1,65 @@
 # CommerceFabric Infrastructure Platform
 
-The **infra-platform** repository contains the Infrastructure as Code (IaC), Kubernetes manifests, and deployment automation used to run the CommerceFabric distributed system on Microsoft Azure.
+`infra-platform` contains the Infrastructure as Code (IaC), Kubernetes configuration, and deployment automation used to run **CommerceFabric** on Microsoft Azure.
 
-It is responsible for provisioning the Azure infrastructure and deploying the CommerceFabric microservices and supporting services into Azure Kubernetes Service (AKS).
+It provides a reproducible deployment process for the platform: Azure infrastructure can be created from Bicep, workloads deployed to AKS, and individual microservices released independently through GitHub Actions.
+
+## More Info
+
+- For more info, please see:
+  - [Deployment Flow and Diagrams](./docs/DeploymentFlow.md)
+  - [Lower Level Technical Documentation](./docs/Technical.md)
 
 ## Architecture
 
-CommerceFabric uses the following Azure architecture:
+CommerceFabric runs primarily on:
 
-todo - generate a diagram showing the azure architecture + another sequence diagram to show the CI/CD flow
-
-### Azure Resources
-
-| Resource | Purpose |
+| Component | Purpose |
 |---|---|
-| **Azure Kubernetes Service (AKS)** | Runs the CommerceFabric microservices, API gateway, databases, caches and messaging workloads. |
-| **Azure Container Registry (ACR)** | Stores container images built by the individual service repositories. AKS has `AcrPull` access. |
+| **Azure Kubernetes Service (AKS)** | Runs the API Gateway, microservices, databases, cache and messaging workloads. |
+| **Azure Container Registry (ACR)** | Stores versioned CommerceFabric application images built by the service repositories. |
 | **Azure Service Bus** | Provides asynchronous communication between microservices using topics and subscriptions. |
-| **Azure API Management (APIM)** | Provides the public API boundary in front of the API Gateway, including JWT validation and CORS policies. |
-| **Microsoft Entra External ID** | Provides customer authentication using separate frontend/backend application registrations and user flows. |
+| **Azure API Management (APIM)** | Public API boundary providing routing, JWT validation and CORS policies. |
+| **Microsoft Entra External ID** | Provides customer identity and authentication. |
+| **GitHub Actions** | Provisions Azure infrastructure and performs application deployments using OIDC authentication. |
 
-The main application workloads run inside the `commercefabric-namespace` Kubernetes namespace.
+Application workloads run inside the `commercefabric-namespace` Kubernetes namespace.
+
+Third-party workloads such as MongoDB, PostgreSQL, MySQL, Redis and RabbitMQ use pinned upstream container images. CommerceFabric application images are stored privately in ACR.
 
 ---
 
-# Infrastructure as Code
+## Infrastructure as Code
 
-Azure infrastructure is defined using **Bicep**, Microsoft's Infrastructure as Code language for Azure Resource Manager.
-
-At a high level:
+Azure infrastructure is defined using **Bicep**.
 
 ```text
 main.bicep
-    │
-    ├── modules/aks.bicep
-    ├── modules/acr.bicep
-    ├── modules/servicebus.bicep
-    └── modules/apim.bicep
-             │
-             ▼
-       Azure Resources
+   │
+   ├── AKS
+   ├── ACR
+   ├── Service Bus
+   └── APIM
 
 rbac.bicep
-    │
-    ├── AKS  → ACR AcrPull
-    ├── GitHub → ACR AcrPush
-    └── GitHub → AKS Cluster User
+   │
+   ├── AKS → ACR AcrPull
+   ├── GitHub → ACR AcrPush
+   └── GitHub → AKS access
 ```
 
-`main.bicep` coordinates the individual modules and passes configuration such as resource names and locations to them.
+Environment-specific `.bicepparam` files allow the same Bicep modules to create both production and disposable test environments.
 
-Environment-specific values are supplied using `.bicepparam` files. This allows the same infrastructure definition to create production or disposable test environments without modifying the Bicep itself.
+Microsoft Entra External ID configuration is kept separately because the identity tenant exists independently from the main Azure resource group.
 
-RBAC is deployed separately after the resources exist because some permissions depend on identities generated during AKS creation.
-
-### Infrastructure Structure
+### Infrastructure
 
 ```text
 infra/
-│
 ├── main.bicep
 ├── main.bicepparam
 ├── main.test.bicepparam
 ├── rbac.bicep
-│
 ├── configure-apim.ps1
 │
 ├── apim/
@@ -87,185 +83,101 @@ infra/
             └── frontend-app.bicep
 ```
 
-The identity Bicep is intentionally separate from the main infrastructure deployment. It manages CommerceFabric application registrations inside the External ID tenant and is primarily intended for identity/disaster-recovery scenarios.
-
 ---
 
-# CI/CD
+## CI/CD
 
-CommerceFabric uses GitHub Actions to automate both **Azure infrastructure provisioning** and **application deployment**.
+CommerceFabric separates **environment deployment** from **application releases**.
 
-The `infra-platform` repository acts as the central deployment orchestrator. It owns the Azure Bicep infrastructure, Kubernetes manifests, RBAC configuration, and APIM configuration required to run the platform.
+### Full environment deployment
 
-GitHub authenticates to Azure using **Workload Identity Federation (OIDC)** rather than storing a long-lived Azure service-principal password.
-
-## Infrastructure Deployment
-
-Before deploying application workloads, the `infra-platform` workflow ensures the required Azure infrastructure exists and matches the Bicep definitions.
-
-The deployment workflow will:
-
-1. Authenticate to Azure using GitHub OIDC.
-2. Create or verify the Azure Resource Group.
-3. Deploy `main.bicep` to create/update AKS, ACR, Service Bus and APIM.
-4. Deploy `rbac.bicep` to configure access between GitHub, AKS and ACR.
-5. Capture environment-specific outputs generated by the infrastructure deployment.
-6. Deploy the Kubernetes manifests into AKS.
-7. Wait for the API Gateway endpoint to become available.
-8. Configure APIM by importing the OpenAPI definitions and applying JWT/CORS policies.
-
-Because Bicep deployments are declarative, the same workflow can be used both to **recreate a deleted environment** and to **update an existing environment**.
+`deploy-all.yml` creates or reconciles an environment:
 
 ```text
 GitHub Actions
       │
       ▼
-Azure OIDC Authentication
+Azure login using OIDC
       │
       ▼
-Create / Verify Resource Group
+Bicep → Azure infrastructure
       │
       ▼
-Deploy main.bicep
-      │
-      ├── AKS
-      ├── ACR
-      ├── Service Bus
-      └── APIM
+Bicep → Azure RBAC
       │
       ▼
-Deploy rbac.bicep
-      │
-      ├── AKS → ACR AcrPull
-      ├── GitHub → ACR AcrPush
-      └── GitHub → AKS Cluster User
+Kubernetes manifests → AKS
       │
       ▼
-Deploy Kubernetes manifests
+Kubernetes runtime secrets
       │
       ▼
-Wait for API Gateway
-      │
-      ▼
-Configure APIM
-      │
-      ├── Import OpenAPI definitions
-      └── Apply JWT/CORS policies
-      │
-      ▼
-CommerceFabric Environment
+PowerShell → APIM configuration
 ```
 
-> GitHub authenticates to Azure using **Workload Identity Federation (OIDC)** rather than storing a long-lived Azure service-principal password.
+A `bootstrap` mode supports creation of a completely new environment before CommerceFabric application images have been published to its ACR.
 
-## Microservice Releases
+### Microservice releases
 
-Individual microservice repositories remain responsible for their own CI pipelines.
-
-When application code changes, the service repository:
-
-1. Builds and tests the application.
-2. Builds a versioned Docker image.
-3. Authenticates to Azure using GitHub OIDC.
-4. Pushes the image to Azure Container Registry.
-5. Triggers the `infra-platform` deployment workflow.
-
-`infra-platform` then ensures the Azure infrastructure is available before updating the corresponding Kubernetes deployment to use the new image.
+Each microservice repository owns its CI process:
 
 ```text
-Developer Push
-      │
-      ▼
-Microservice Repository
-      │
-      ├── Test
-      ├── Build
-      └── Build Docker Image
-              │
-              ▼
-             ACR
-              │
-              ▼
-     Trigger infra-platform
-              │
-              ▼
-     Ensure Azure Infrastructure
-              │
-              ▼
-     Deploy New Image to AKS
+Code change
+   │
+   ▼
+Test + build
+   │
+   ▼
+Build Docker image
+   │
+   ▼
+Push versioned image → ACR
+   │
+   ▼
+Trigger infra-platform
+   │
+   ▼
+deploy-microservice.yml
+   │
+   ▼
+Rolling update → AKS
 ```
 
-This separation keeps the microservice repositories focused on **building and publishing applications**, while `infra-platform` owns **provisioning and deploying the environment in which they run**.
+This keeps application repositories responsible for **building artifacts**, while `infra-platform` owns the **environment and deployment process**.
 
-> GitHub authenticates to Azure using **Workload Identity Federation (OIDC)** rather than storing a long-lived Azure service-principal password.
+GitHub authenticates to Azure using **Workload Identity Federation (OIDC)**, avoiding long-lived Azure deployment credentials in GitHub.
 
 ---
 
-# Full Environment Deployment
+## API Management
 
-The intended full deployment flow is:
+APIM exposes the public CommerceFabric APIs in front of the Kubernetes API Gateway.
 
-```text
-GitHub Actions
-      │
-      ▼
-Authenticate to Azure using OIDC
-      │
-      ▼
-Create/verify Resource Group
-      │
-      ▼
-Deploy main.bicep
-      │
-      ├── AKS
-      ├── ACR
-      ├── Service Bus
-      └── APIM
-      │
-      ▼
-Deploy rbac.bicep
-      │
-      ├── AKS → ACR
-      ├── GitHub → ACR
-      └── GitHub → AKS
-      │
-      ▼
-Deploy Kubernetes manifests
-      │
-      ▼
-Wait for API Gateway endpoint
-      │
-      ▼
-Configure APIM
-      │
-      ├── Import OpenAPI definitions
-      └── Apply JWT/CORS policies
-      │
-      ▼
-CommerceFabric available
-```
+`configure-apim.ps1` discovers the API Gateway endpoint and imports the Orders, Products and Users OpenAPI specifications into APIM.
 
-This makes the Azure environment disposable: the resource group can be removed when the portfolio project is not required and recreated from source control when needed.
+`apim-policies.bicep` then applies shared API policies such as:
 
-The Microsoft Entra External ID tenant is managed separately and does not need to be destroyed when the main Azure resource group is removed.
+- JWT validation
+- CORS configuration
+- API access policies
+
+This keeps the public API configuration reproducible alongside the rest of the infrastructure.
 
 ---
 
-# Kubernetes
+## Kubernetes
 
-AKS hosts the CommerceFabric application and supporting infrastructure, including:
+AKS hosts:
 
 - API Gateway
-- Users microservice
-- Products microservice
-- Orders microservice
+- Orders, Products and Users microservices
+- MongoDB
 - PostgreSQL
 - MySQL
-- MongoDB
 - Redis
 - RabbitMQ
 
-Deployments can be inspected with:
+Useful commands:
 
 ```powershell
 kubectl get deployments -n commercefabric-namespace
@@ -273,34 +185,53 @@ kubectl get pods -n commercefabric-namespace
 kubectl rollout status deployment/<deployment-name> -n commercefabric-namespace
 ```
 
-Test data can optionally be seeded using:
+---
 
-```powershell
-kubectl apply -R -f aks_seedDummyData/
-```
+## Secrets & Security
+
+Secrets are not stored in Bicep or committed to source control.
+
+The deployment workflows retrieve or inject runtime secrets into Kubernetes, including the Azure Service Bus connection and Entra application secret.
+
+Azure access from GitHub uses OIDC federation and Azure RBAC.
+
+### Deployment Prerequisites
+
+GitHub Actions requires a Microsoft Entra application configured with **Workload Identity Federation (OIDC)**.
+
+The repository stores its Azure client, tenant and subscription IDs as GitHub secrets; no Azure client secret is required.
+
+The GitHub deployment principal requires subscription-level **Contributor** and **Role Based Access Control Administrator** permissions so that `deploy-all` can create resource groups, provision infrastructure and establish the required Azure RBAC assignments.
+
+This bootstrap identity exists independently from the CommerceFabric resource group, allowing the environment to be recreated after deletion.
 
 ---
 
-# Secrets and Security
+## Deployment Environments
 
-Secrets are **not stored in Bicep or committed to source control**.
+The same infrastructure definitions support:
 
-GitHub Actions secrets provide deployment configuration, while Kubernetes Secrets provide sensitive runtime configuration to workloads.
+- **Production** — the main CommerceFabric environment.
+- **Test** — a disposable environment used to validate infrastructure and deployment automation.
 
-Azure authentication from GitHub uses OIDC federation, removing the need for a long-lived Azure deployment password.
+The test environment has been successfully recreated through the GitHub Actions/Bicep deployment flow, validating the infrastructure recovery process.
 
-Generated environment-specific values such as Service Bus connection strings are intended to be propagated into GitHub/Kubernetes configuration as part of the deployment automation.
+The External ID tenant is managed separately and survives deletion of the main Azure resource group.
 
 ---
 
-# Current Status
+## Status
 
-The Azure infrastructure can currently be recreated from Bicep, including:
+Implemented:
 
-- AKS
-- ACR
-- Service Bus topics and subscriptions
-- APIM
-- Azure RBAC relationships
+- Bicep provisioning for AKS, ACR, Service Bus and APIM
+- Automated Azure RBAC
+- Production/test parameterisation
+- GitHub OIDC authentication
+- Full environment bootstrap workflow
+- Incremental microservice deployment workflow
+- Kubernetes runtime secret creation
+- APIM OpenAPI import and policy deployment
+- Disposable environment recovery testing
 
-The next stage is integrating the Bicep deployment into the existing GitHub Actions release workflow and automating propagation of generated environment configuration.
+Current work focuses on final end-to-end application validation and deployment hardening.
